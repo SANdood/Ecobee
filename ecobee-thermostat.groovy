@@ -63,6 +63,8 @@ metadata {
         command "setThermostatProgram"
         command "home"
         command "sleep"
+        command "asleep"
+        command "night"
         command "away"
         
         command "fanOff"  // Missing from the Thermostat standard capability set
@@ -849,6 +851,18 @@ def sleep() {
     setThermostatProgram("Sleep")
 }
 
+def asleep() {
+	// Change the Comfort Setting to Sleep    
+    LOG("asleep()", 5)
+    setThermostatProgram("Sleep")
+}
+
+def night() {
+	// Change the Comfort Setting to Sleep    
+    LOG("night()", 5)
+    setThermostatProgram("Sleep")
+}
+
 def generateProgramEvent(program, failedProgram=null) {
 	LOG("Generate generateProgramEvent Event: program ${program}", 4)
 
@@ -1094,6 +1108,7 @@ def generateStatusEvent() {
 	def heatingSetpoint = device.currentValue("heatingSetpoint")
 	def coolingSetpoint = device.currentValue("coolingSetpoint")
 	def temperature = device.currentValue("temperature")
+    def operatingState = device.currentValue("thermostatOperatingState")
 
 	def statusText	
 	LOG("Generate Status Event for Mode = ${mode}", 4)
@@ -1101,25 +1116,38 @@ def generateStatusEvent() {
 	LOG("Heating setpoint = ${heatingSetpoint}", 4)
 	LOG("Cooling setpoint = ${coolingSetpoint}", 4)
 	LOG("HVAC Mode = ${mode}", 4)	
+    LOG("Operating State = ${operatingState}", 4)
 
 	if (mode == "heat") {
-		if (temperature >= heatingSetpoint) {
-			statusText = "Right Now: Idle"
+//		if (temperature >= heatingSetpoint) {
+		if (operatingState != "heating") {
+			statusText = "Idle (Heat)"
 		} else {
 			statusText = "Heating to ${heatingSetpoint}°"
 		}
 	} else if (mode == "cool") {
-		if (temperature <= coolingSetpoint) {
-			statusText = "Right Now: Idle"
+//		if (temperature <= coolingSetpoint) {
+		if (operatingState != "cooling") {
+			statusText = "Idle (Cool)"
 		} else {
 			statusText = "Cooling to ${coolingSetpoint}°"
 		}
 	} else if (mode == "auto") {
-		statusText = "Right Now: Auto (Heat: ${heatingSetpoint}/Cool: ${coolingSetpoint})"
+    	if (operatingState == "heating") {
+        	statusText = "Heating to ${heatingSetpoint}° (Auto)"
+        } else if (operatingState == "cooling") {
+        	statusText = "Cooling to ${coolingSetpoint}° (Auto)"
+        } else {
+			statusText = "Idle (Auto Heat: ${heatingSetpoint}°/Cool: ${coolingSetpoint}°)"
+        }
 	} else if (mode == "off") {
 		statusText = "Right Now: Off"
 	} else if (mode == "emergencyHeat" || mode == "emergency heat" || mode == "emergency") {
-		statusText = "Emergency Heat"
+    	if (operatingState != "heating") {
+			statusText = "Idle (Emergency Heat)"
+		} else {
+			statusText = "Emergency Heating to ${heatingSetpoint}°"
+		}
 	} else {
 		statusText = "${mode}?"
 	}
