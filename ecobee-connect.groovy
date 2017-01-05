@@ -931,10 +931,10 @@ def userDefinedEvent(evt) {
 	LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 4, null, "info")
     atomicState.lastUserDefinedEventDate = getTimestamp()
     atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})"    
-    if ( ((now() - atomicState.lastUserDefinedEvent) / 1000 / 60) < 3) { 
+    if ( ((now() - atomicState.lastUserDefinedEvent) / 1000 / 60) < 3 ) { 
     	LOG("Time since last event is less than 3 minutes. Exiting without performing additional actions.", 4)
     	return 
-	}
+ 	}
     
     atomicState.lastUserDefinedEvent = now()
     atomicState.lastUserDefinedEventDate = getTimestamp()    
@@ -1363,7 +1363,7 @@ def updateSensorData() {
                     	LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
                         if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
 							temperature = cap.value as Double
-							temperature = wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(0)
+							temperature = wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
                         } else if (cap.value == "unknown") {
                         	// TODO: Do something here to mark the sensor as offline?
                             LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
@@ -1443,10 +1443,10 @@ def updateThermostatData() {
         }        
         
         def usingMetric = wantMetric() // cache the value to save the function calls
-        def tempTemperature = myConvertTemperatureIfNeeded( (stat.runtime.actualTemperature.toDouble() / 10), "F", (usingMetric ? 1 : 0))
+        def tempTemperature = myConvertTemperatureIfNeeded( (stat.runtime.actualTemperature.toDouble() / 10), "F", (usingMetric ? 1 : 1))
         def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (stat.runtime.desiredHeat.toDouble() / 10), "F", (usingMetric ? 1 : 0))
         def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (stat.runtime.desiredCool.toDouble() / 10), "F", (usingMetric ? 1 : 0))
-        def tempWeatherTemperature = myConvertTemperatureIfNeeded( ((stat.weather.forecasts[0].temperature.toDouble() / 10)), "F", (usingMetric ? 1 : 0))
+        def tempWeatherTemperature = myConvertTemperatureIfNeeded( ((stat.weather.forecasts[0].temperature.toDouble() / 10)), "F", (usingMetric ? 1 : 1))
                 
         def currentClimateName = ""
 		def currentClimateId = ""
@@ -1500,9 +1500,9 @@ def updateThermostatData() {
 		currentProgramName: currentClimateName,
 		currentProgramId: currentClimateId,
 		auxHeatMode: (stat.settings.hasHeatPump) && (stat.settings.hasForcedAir || stat.settings.hasElectric || stat.settings.hasBoiler),
-		temperature: usingMetric ? tempTemperature : tempTemperature.toInteger(),
-		heatingSetpoint: usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.toInteger(),
-		coolingSetpoint: usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.toInteger(),
+		temperature: usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
+		heatingSetpoint: usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
+		coolingSetpoint: usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
 		thermostatMode: stat.settings.hvacMode,
 		thermostatFanMode: currentFanMode,
 		humidity: stat.runtime.actualHumidity,
@@ -1510,13 +1510,13 @@ def updateThermostatData() {
 		thermostatOperatingState: getThermostatOperatingState(stat),
         timeOfDay: atomicState.timeOfDay,
 		weatherSymbol: stat.weather.forecasts[0].weatherSymbol.toString(),
-		weatherTemperature: usingMetric ? tempWeatherTemperature : tempWeatherTemperature.toInteger()
+		weatherTemperature: usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/
 	]
        
-		data["temperature"] = data["temperature"] ? ( wantMetric() ? data["temperature"].toDouble() : data["temperature"].toDouble().toInteger() ) : data["temperature"]
-		data["heatingSetpoint"] = data["heatingSetpoint"] ? ( wantMetric() ? data["heatingSetpoint"].toDouble() : data["heatingSetpoint"].toDouble().toInteger() ) : data["heatingSetpoint"]
-		data["coolingSetpoint"] = data["coolingSetpoint"] ? ( wantMetric() ? data["coolingSetpoint"].toDouble() : data["coolingSetpoint"].toDouble().toInteger() ) : data["coolingSetpoint"]
-		data["weatherTemperature"] = data["weatherTemperature"] ? ( wantMetric() ? data["weatherTemperature"].toDouble() : data["weatherTemperature"].toDouble().toInteger() ) : data["weatherTemperature"]
+		data["temperature"] = data["temperature"] ? ( wantMetric() ? data["temperature"].toDouble() : data["temperature"].toDouble().round(1) /*.toInteger()*/ ) : data["temperature"]
+		data["heatingSetpoint"] = data["heatingSetpoint"] ? ( wantMetric() ? data["heatingSetpoint"].toDouble() : data["heatingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["heatingSetpoint"]
+		data["coolingSetpoint"] = data["coolingSetpoint"] ? ( wantMetric() ? data["coolingSetpoint"].toDouble() : data["coolingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["coolingSetpoint"]
+		data["weatherTemperature"] = data["weatherTemperature"] ? ( wantMetric() ? data["weatherTemperature"].toDouble() : data["weatherTemperature"].toDouble().round(1) /*.toInteger()*/ ) : data["weatherTemperature"]
         
         climateData.each { climate ->
         	LOG("Climate found: ${climate}", 5)
