@@ -1153,7 +1153,7 @@ def pollChildren(child = null) {
     	if( oneChild.hasCapability("Thermostat") ) {
         	// We found a Thermostat, send all of its events
             LOG("pollChildren() - We found a Thermostat!", 5)
-            oneChild.generateEvent(atomicState.thermostats[oneChild.device.deviceNetworkId]?.data)
+            oneChild./(atomicState.thermostats[oneChild.device.deviceNetworkId]?.data)
         } else {
         	// We must have a remote sensor
             LOG("pollChildren() - Updating sensor data for ${oneChild}: ${oneChild.device.deviceNetworkId} data: ${atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data}", 4)
@@ -1187,10 +1187,142 @@ private def generateEventLocalParams() {
     }
 }
 
+private String checkThermostatSummary(thermostatIdString) {
+
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdString + '","includeEquipmentStatus":"true"}}'
+    LOG("checkThermostatSummary() - jsonRequestBody is: ${jsonRequestBody}", 5)
+    
+    def result = null
+	
+	def pollParams = [
+			uri: apiEndpoint,
+			path: "/1/thermostatSummary",
+			headers: ["Content-Type": "application/json", "Authorization": "Bearer ${atomicState.authToken}"],
+			query: [format: 'json', body: jsonRequestBody]
+	]
+	
+	def statusCode=true
+	int j=0        
+	def thermostatsRevised = ""
+	def statusRevised = ""
+	
+	while ((statusCode) && (j++ <2)) { // retries once if api call fails
+		try{
+			httpGet(pollParams) { resp ->
+				if(resp.status == 200) {
+					LOG("thermostatSummary poll results returned resp.data ${resp.data}", 2)
+				
+					// post any changed timeStamps to the thermostat devices, collect string of all thermostatInfo that has channged
+					// HERE....
+					statusCode = resp.data.status.code
+					def message = resp.data.status.message
+					if (!statusCode) {
+						data?.revisionList = resp.data.revisionList
+						data?.statusList = resp.data.statusList
+						data?.thermostatCount = data.revisionList.size()
+						for (i in 0..data.thermostatCount - 1) {
+							def thermostatDetails = data.revisionList[i].split(':')
+							String id = thermostatDetails[0]
+							String thermostatName = thermostatDetails[1]
+							def connected = thermostatDetails[2]
+							String thermostatRevision = thermostatDetails[3]
+							String alertsRevision = thermostatDetails[4]
+							String runtimeRevision = thermostatDetails[5]
+							String intervalRevision = thermostatDetails[6]
+
+							if (isStateChange(device, 'runtimeRevision', runtimeRevision)) {
+								name: 'runtimeRevision', value: runtimeRevision, isStateChange: true, displayed: false
+							}
+							if (isStateChange(device, 'thermostatRevision', thermostatRevision)) {
+								sendEvent name: 'thermostatRevision', value: thermostatRevision, isStateChange: true, displayed: false
+							}
+							if (isStateChange(device, 'alertsRevision', alertsRevision)) {
+								sendEvent name: 'alertsRevision', value: alertsRevision, isStateChange: true, displayed: false
+							}
+							if (isStateChange(device, 'intervalRevision', intervalRevision)) {
+								sendEvent name: 'intervalRevision', value: intervalRevision, isStateChange: true, displayed: false
+							}	
+							
+							LOG "getThermostatRevision> done for ${thermostatName}, Revisions: thermostat: ${thermostatRevision}, alerts: ${alertsRevision}, runtime: ${runtimeRevision}, interval: ${intervalRevision}"
+						}
+					}
+
+				
+//				atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
+//				atomicState.thermostatData = resp.data
+//                updateLastPoll()
+               
+                // Update the data and send it down to the devices as events
+//				updateSensorData()
+//				updateThermostatData()                
+//				result = true
+//                
+                if (apiConnected() != "full") {
+					apiRestored()
+                    generateEventLocalParams() // Update the connection status
+                }
+                
+				LOG("httpGet: updated ${atomicState.thermostats?.size()} stats: ${atomicState.thermostats}")
+			} else {
+				LOG("checkThermostatSummary() - polling children & got http status ${resp.status}", 1, null, "error")
+
+				//refresh the auth token
+				if (resp.status == 500 && resp.data.status.code == 14) {
+					LOG("Resp.status: ${resp.status} Status Code: ${resp.data.status.code}. Unable to recover", 1, null, "error")
+                    // Should not possible to recover from a code 14 but try anyway?
+                    
+                    apiLost("checkThermostatSummary() - Resp.status: ${resp.status} Status Code: ${resp.data.status.code}. Unable to recover.")
+				}
+				else {
+					LOG("checkThermostatSummary() - Other responses received. Resp.status: ${resp.status} Status Code: ${resp.data.status.code}.", 1, null, "error")
+				}
+			}
+		}
+	} catch (groovyx.net.http.HttpResponseException e) {    
+        LOG("checkThermostatSummary()  HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}", 1, null, "error")
+        result = false
+         if (e.response.data.status.code == 14) {
+            atomicState.action = "pollChildren"
+            LOG( "Refreshing your auth_token!", 4)
+            if ( refreshAuthToken() ) { result = true } else { result = false }
+        }
+    } catch (java.util.concurrent.TimeoutException e) {
+    	LOG("checkThermostatSummary(), TimeoutException: ${e}.", 1, null, "warn")
+        // Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
+        if ( canSchedule() ) { runIn(atomicState.reAttemptInterval, "pollChildren") }
+        result = false    
+    } catch (Exception e) {
+    // TODO: Handle "org.apache.http.conn.ConnectTimeoutException" as this is a transient error and shouldn't count against our retries
+		LOG("checkThermostatSummary(): General Exception: ${e}.", 1, null, "error")
+        atomicState.reAttemptPoll = atomicState.reAttemptPoll + 1
+        if (atomicState.reAttemptPoll > 3) {        
+        	apiLost("Too many retries (${atomicState.reAttemptPoll - 1}) for polling.")
+            return false
+        } else {
+        	LOG("Setting up retryPolling")
+			def reAttemptPeriod = 15 // in sec
+        	if ( canSchedule() ) {
+            	runIn(atomicState.reAttemptInterval, "refreshAuthToken") 
+			} else { 
+            	LOG("Unable to schedule refreshAuthToken, running directly")
+            	refreshAuthToken() 
+            }
+        }    	
+    }
+    LOG("<===== Leaving checkThermostatSummary() results: ${result}", 5)
+   
+	return result
+
+}
+
 private def pollEcobeeAPI(thermostatIdsString = "") {
 	LOG("=====> pollEcobeeAPI() entered - thermostatIdsString = ${thermostatIdsString}", 2, null, "info")
 	atomicState.forcePoll = false
 
+	// lets find out what has changed
+	def changesString = checkThermostatSummary(thermostatIdString) //
+	
+	
 	// TODO: Check on any running EVENTs on thermostat	
 	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"true","includeEvents":"true"}}'
     //                     {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
