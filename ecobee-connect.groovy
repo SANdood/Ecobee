@@ -1206,6 +1206,12 @@ private String checkThermostatSummary(thermostatIdString) {
 	def thermostatsRevised = ""
 	def statusRevised = ""
 	
+	boolean runtimeChanged = false
+	boolean thermostatChanged = false
+	boolean alertsChanged = false
+	boolean intervalChanged = false
+	boolean equipStatusChanged = false
+	
 	while ((statusCode) && (j++ <2)) { // retries once if api call fails
 		try{
 			httpGet(pollParams) { resp ->
@@ -1222,9 +1228,11 @@ private String checkThermostatSummary(thermostatIdString) {
 						data?.thermostatCount = data.revisionList.size()
 						for (i in 0..data.thermostatCount - 1) {
 							def thermostatDetails = data.revisionList[i].split(':')
+							log.debug thermostatDetails
+							
 							String id = thermostatDetails[0]
 							String thermostatName = thermostatDetails[1]
-							def connected = thermostatDetails[2]
+							String connected = thermostatDetails[2]
 							String thermostatRevision = thermostatDetails[3]
 							String alertsRevision = thermostatDetails[4]
 							String runtimeRevision = thermostatDetails[5]
