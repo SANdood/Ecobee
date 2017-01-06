@@ -87,6 +87,13 @@ metadata {
         attribute "timeOfDate", "enum", ["day", "night"]
         attribute "lastPoll", "string"
         
+		attribute "connected"
+		attribute "thermostatRevision"
+		attribute "alertsRevision"
+		attribute  "runtimeRevision"
+		attribute "intervalRevision"
+		attribute "equipmentStatus"		
+		
         attribute "smart1", "string"
         attribute "smart2", "string"
         attribute "smart3", "string"
