@@ -754,7 +754,10 @@ def initialize() {
     atomicState.lastWatchdog = nowTime
     atomicState.lastWatchdogDate = nowDate
     atomicState.lastUserDefinedEvent = now()
-    atomicState.lastUserDefinedEventDate = getTimestamp()    
+    atomicState.lastUserDefinedEventDate = getTimestamp()  
+    atomicState.lastRevisions = "foo"
+    atomicState.latestRevisions = "bar"
+    atomicState.skipCount = 0
     
     atomicState.timeOfDay = getTimeOfDay()
     
@@ -927,18 +930,20 @@ def sunsetEvent(evt) {
     scheduleWatchdog(evt, true)
 }
 
+// Event on a monitored device - ignore the frequency and just go ahead and poll, since pollChildren will throttle if nothing has changed.
 def userDefinedEvent(evt) {
 	LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 4, null, "info")
     atomicState.lastUserDefinedEventDate = getTimestamp()
     atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})"    
-    if ( ((now() - atomicState.lastUserDefinedEvent) / 1000 / 60) < 3 ) { 
-    	LOG("Time since last event is less than 3 minutes. Exiting without performing additional actions.", 4)
-    	return 
- 	}
+	poll()
     
+	if ( ((now() - atomicState.lastUserDefinedEvent) / 1000 / 60) < 3 ) { 
+    	LOG("userDefinedEvent() - polled, but time since last event is less than 3 minutes. Exiting without performing additional actions.", 4)
+    	return 
+ 	}    
     atomicState.lastUserDefinedEvent = now()
     atomicState.lastUserDefinedEventDate = getTimestamp()    
-    poll()
+ //   poll()
     scheduleWatchdog(evt, true)
 }
 
@@ -1136,15 +1141,20 @@ def pollChildren(child = null) {
     def timeSinceLastPoll = (atomicState.forcePoll == true) ? 0 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
     LOG("Time since last poll? ${timeSinceLastPoll} -- atomicState.lastPoll == ${atomicState.lastPoll}", 3, child, "info")
     
-    if ( (atomicState.forcePoll == true) || ( timeSinceLastPoll > getMinMinBtwPolls().toDouble() ) ) {
-    	// It has been longer than the minimum delay OR we are doing a forced poll
+    // Also, check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
+    String thermostatsToPoll = getChildThermostatDeviceIdsString()
+    boolean somethingChanged = checkThermostatSummary(thermostatsToPoll)
+    
+    if ( (atomicState.forcePoll == true) || somethingChanged /* || ( timeSinceLastPoll > getMinMinBtwPolls().toDouble() ) */ ) {
+    	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
         LOG("Calling the Ecobee API to fetch the latest data...", 4, child)
-    	pollEcobeeAPI(getChildThermostatDeviceIdsString())  // This will update the values saved in the state which can then be used to send the updates
+    	pollEcobeeAPI(thermostatsToPoll)  // This will update the values saved in the state which can then be used to send the updates
 	} else {
-        LOG("pollChildren() - Not time to call the API yet. It has been ${timeSinceLastPoll} minutes since last full poll.", 4, child)
+        LOG("pollChildren() - It has been ${timeSinceLastPoll} minutes since last full poll, but nothing has changed. Local update only.", 4, child)
         generateEventLocalParams() // Update any local parameters and send
     }
 	
+    if (somethingChanged) {
 	// Iterate over all the children
 	def d = getChildDevices()
     d?.each() { oneChild ->
@@ -1159,6 +1169,7 @@ def pollChildren(child = null) {
             LOG("pollChildren() - Updating sensor data for ${oneChild}: ${oneChild.device.deviceNetworkId} data: ${atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data}", 4)
             oneChild.generateEvent(atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data)
         } 
+    }
     }
     return results
 }
@@ -1187,12 +1198,13 @@ private def generateEventLocalParams() {
     }
 }
 
-private String checkThermostatSummary(thermostatIdsString) {
+// Checks if anything has changed since the last time this routine was called, using lightweight thermostatSummary poll
+// NOTE: Despite the documentation, Runtime Revision CAN change more frequently than every 3 minutes - equipmentStatus is 
+//       apparently updated in real time (or at least very close to real time)
+private boolean checkThermostatSummary(thermostatIdsString) {
 
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"true"}}'
-    LOG("checkThermostatSummary() - jsonRequestBody is: ${jsonRequestBody}", 4)
-    
-    def result = null
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeEquipmentStatus":"false"}}'
+    // LOG("checkThermostatSummary() - jsonRequestBody is: ${jsonRequestBody}", 4)
 	
 	def pollParams = [
 			uri: apiEndpoint,
@@ -1201,80 +1213,81 @@ private String checkThermostatSummary(thermostatIdsString) {
 			query: [format: 'json', body: jsonRequestBody]
 	]
 	
+    def result = false
 	def statusCode=999
 	int j=0        
-	def thermostatsRevised = ""
-	def statusRevised = ""
 	
-	boolean runtimeChanged = false
-	boolean thermostatChanged = false
-	boolean alertsChanged = false
-	boolean intervalChanged = false
-	boolean equipStatusChanged = false
-	
-	while ((statusCode != 0) /* && (j++ <2)*/) { // retries once if api call fails
-//		try {
+	while ((statusCode != 0) && (j++ <2)) { // retries once if api call fails
+		try {
 			httpGet(pollParams) { resp ->
 				if(resp.status == 200) {
-					LOG("thermostatSummary poll results returned resp.data ${resp.data}", 2)
-				
-					// post any changed timeStamps to the thermostat devices, collect string of all thermostatInfo that has channged
-					// HERE....
+					LOG("checkThermostatSummary() poll results returned resp.data ${resp.data}", 4)
 					statusCode = resp.data.status.code
-					def message = resp.data.status.message
-					LOG("statusCode: ${statusCode}", 2)
-					if (statusCode == 0) {                
-						for (i in 0..resp.data.thermostatCount - 1) {
-							def thermostatDetails = resp.data.revisionList[i].split(':')							
-							String id = thermostatDetails[0]
-							String thermostatName = thermostatDetails[1]
-							String connected = thermostatDetails[2]
-							String thermostatRevision = thermostatDetails[3]
-							String alertsRevision = thermostatDetails[4]
-							String runtimeRevision = thermostatDetails[5]
-							String intervalRevision = thermostatDetails[6]
-                            
-                            def thermostatStatus = resp.data.statusList[i].split(':')
-                            String equipmentStatus = thermostatStatus[1]
-
-/*							if (isStateChange(device, 'runtimeRevision', runtimeRevision)) {
-								name: 'runtimeRevision', value: runtimeRevision, isStateChange: true, displayed: false
-							}
-							if (isStateChange(device, 'thermostatRevision', thermostatRevision)) {
-								sendEvent name: 'thermostatRevision', value: thermostatRevision, isStateChange: true, displayed: false
-							}
-							if (isStateChange(device, 'alertsRevision', alertsRevision)) {
-								sendEvent name: 'alertsRevision', value: alertsRevision, isStateChange: true, displayed: false
-							}
-							if (isStateChange(device, 'intervalRevision', intervalRevision)) {
-								sendEvent name: 'intervalRevision', value: intervalRevision, isStateChange: true, displayed: false
-							}	
-*/							
-							LOG("checkThermostatSummary() done for ${thermostatName}, Revisions: thermostat: ${thermostatRevision}, alerts: ${alertsRevision}, runtime: ${runtimeRevision}, interval: ${intervalRevision}, equipmentStatus: ${equipmentStatus}", 2)
-
-						}
+					if (statusCode == 0) { 
+                    	def revisions = resp.data.revisionList
+                        if (atomicState.lastRevisions != revisions) {
+                        	result = true
+                            atomicState.skipCount = atomicState.skipCount + 1
+                            atomicState.latestRevisions = revisions		// let pollEcobeeAPI update last with latest after it finishes the poll
+                        }
 					}
 				} else {
 					LOG("checkThermostatSummary() - polling got http status ${resp.status}", 1, null, "error")
 				}
 			}
+		} catch (groovyx.net.http.HttpResponseException e) {    
+        	LOG("checkThermostatSummary()  HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}", 1, null, "error")
+        	result = false
+         	if (e.response.data.status.code == 14) {
+            	atomicState.action = "pollChildren"
+            	LOG( "Refreshing your auth_token!", 4)
+            	if ( refreshAuthToken() ) { result = true } else { result = false }
+        	}
+			atomicState.forcePoll = true		// make pollEcobeeAPI poll anyway
+    	} catch (java.util.concurrent.TimeoutException e) {
+    		LOG("checkThermostatSummary(), TimeoutException: ${e}.", 1, null, "warn")
+        	// Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
+        	if ( canSchedule() ) { runIn(atomicState.reAttemptInterval, "pollChildren") }
+       	 	result = false    
+    	}
 	}
-    LOG("<===== Leaving checkThermostatSummary() results: ${result}", 5)
+    LOG("<===== Leaving checkThermostatSummary() result: ${result}", 2, null, "info")
 	return result
 }
 
 private def pollEcobeeAPI(thermostatIdsString = "") {
 	LOG("=====> pollEcobeeAPI() entered - thermostatIdsString = ${thermostatIdsString}", 2, null, "info")
-	atomicState.forcePoll = false
+
 
 	// lets find out what has changed
-	 def changesString = checkThermostatSummary(thermostatIdsString)
+	boolean somethingChanged 
+    if (atomicState.lastRevisions != atomicState.latestRevisions) {
+    	somethingChanged = true	// we already know there are changes
+    } else {
+    	somethingChanged = checkThermostatSummary(thermostatIdsString)
+    }
+    
+    // if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
+    // This probably can't happen anymore...shouldn't event be here if nothing has changed and not a forced poll...
+    if (!somethingChanged && !atomicState.forcePoll) {
+    	// atomicState.skipCount = atomicState.skipCount + 1
+    	LOG("<===== Leaving pollEcobeeAPI() - nothing changed, skipping heavy poll (${atomicState.skipCount})", 2, null, "info")
+        return true		// act like we completed the heavy poll without error
+	}
 	
+    atomicState.forcePoll = false
+        
+//	def jsonRequestBody 
 	
-	// TODO: Check on any running EVENTs on thermostat	
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"true","includeEvents":"true"}}'
-    //                     {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
-	
+//	if (!somethingChanged) {
+		// if this is a forced poll, request all the data we use
+		// TODO: Check on any running EVENTs on thermostat	
+		def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"true","includeEvents":"true"}}'
+   	 	//                 {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
+//	} else {
+		// only get the data that has changed
+//		jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false"'
+//	}
     LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 5)
     
     def result = false
@@ -1298,13 +1311,14 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 				updateSensorData()
 				updateThermostatData()                
 				result = true
+                atomicState.lastRevisions = atomicState.latestRevisions
                 
                 if (apiConnected() != "full") {
 					apiRestored()
                     generateEventLocalParams() // Update the connection status
                 }
                 
-				LOG("httpGet: updated ${atomicState.thermostats?.size()} stats: ${atomicState.thermostats}")
+				LOG("pollEcobeeAPI() httpGet: updated ${atomicState.thermostats?.size()} stats: ${atomicState.thermostats}", 1, null, "info")
 			} else {
 				LOG("pollEcobeeAPI() - polling children & got http status ${resp.status}", 1, null, "error")
 
@@ -1510,7 +1524,7 @@ def updateThermostatData() {
 		// Check to see if there is even a value, not all types have a sensor
 		occupancy =  occupancyCap.value ?: "not supported"
         }
-        LOG("Program data: ${stat.program}  Current climate (ref): ${stat.program?.currentClimateRef}", 4)
+        // LOG("Program data: ${stat.program}  Current climate (ref): ${stat.program?.currentClimateRef}", 4)
         
         // Determine if an Event is running, find the first running event
         def runningEvent = null
@@ -1570,7 +1584,7 @@ def updateThermostatData() {
         
 		if (atomicState.hasInternalSensors) { occupancy = (occupancy == "true") ? "active" : "inactive" }
 
-		def data = [ 
+		def data = [
 		temperatureScale: getTemperatureScale(),
         lastPoll: atomicState.lastPollDate,
 		apiConnected: apiConnected(),
@@ -2359,4 +2373,6 @@ private debugLevel(level=3) {
 private def dirtyPollData() {
 	LOG("dirtyPollData() called to reset poll state", 5)
 	atomicState.forcePoll = true
+    atomicState.lastRevisions = "foo"
+    atomicState.latestRevisions = "bar"
 }
