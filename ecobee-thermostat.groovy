@@ -87,12 +87,7 @@ metadata {
         attribute "timeOfDate", "enum", ["day", "night"]
         attribute "lastPoll", "string"
         
-		attribute "connected"
-		attribute "thermostatRevision"
-		attribute "alertsRevision"
-		attribute  "runtimeRevision"
-		attribute "intervalRevision"
-		attribute "equipmentStatus"		
+		attribute "equipmentStatus", "string"		
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -499,10 +494,11 @@ def generateEvent(Map results) {
                 LOG("generateEvent(): Temperature value: ${sendValue}", 5, this, "trace")
 				isChange = isTemperatureStateChange(device, name, value.toString())
 				isDisplayed = isChange
-				event << [value: sendValue, isStateChange: isChange, displayed: isDisplayed]
+				// Only send changed events/values
+				if (isChange) event << [value: sendValue, isStateChange: isChange, displayed: isDisplayed]
 			} else if (name=="heatMode" || name=="coolMode" || name=="autoMode" || name=="auxHeatMode") {
 				isChange = isStateChange(device, name, value.toString())
-				event << [value: value.toString(), isStateChange: isChange, displayed: false]
+				if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: false]
 			} else if (name=="thermostatOperatingState") {
             	generateOperatingStateEvent(value.toString())
                 return
@@ -510,17 +506,17 @@ def generateEvent(Map results) {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
                 isDisplayed = isChange
-                event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
+                if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
             } else if (name=="weatherSymbol" && device.currentValue("timeOfDay") == "night") {
             	// Check to see if it is night time, if so change to a night symbol
                 def symbolNum = value.toInteger() + 100
                 isChange = isStateChange(device, name, symbolNum.toString())
                 isDisplayed = isChange
-				event << [value: symbolNum.toString(), isStateChange: isChange, displayed: isDisplayed]            
+				if (isChange) event << [value: symbolNum.toString(), isStateChange: isChange, displayed: isDisplayed]            
             } else {
 				isChange = isStateChange(device, name, value.toString())
 				isDisplayed = isChange
-				event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
+				if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
 			}
 			LOG("Out of loop, calling sendevent(${event})", 5)
 			sendEvent(event)
