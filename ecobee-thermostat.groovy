@@ -487,39 +487,40 @@ def generateEvent(Map results) {
 			LOG("generateEvent() - In each loop: name: ${name}  value: ${value}", 4)
 			def isChange = false
 			def isDisplayed = true
-			def event = [name: name, linkText: linkText, descriptionText: getThermostatDescriptionText(name, value, linkText), handlerName: name]
-
+			def eventFront = [name: name, linkText: linkText, descriptionText: getThermostatDescriptionText(name, value, linkText), handlerName: name]
+			def event = [:]
+			
 			if (name=="temperature" || name=="heatingSetpoint" || name=="coolingSetpoint" || name=="weatherTemperature" ) {
 				def sendValue = value // ? convertTemperatureIfNeeded(value.toDouble(), "F", 1): value //API return temperature value in F
                 LOG("generateEvent(): Temperature value: ${sendValue}", 5, this, "trace")
-				isChange = isTemperatureStateChange(device, name, value.toString())
-				isDisplayed = isChange
+				isChange = isStateChange(device, name, value.toString())
+				// isDisplayed = isChange
 				// Only send changed events/values
-				if (isChange) event << [value: sendValue, isStateChange: isChange, displayed: isDisplayed]
+				if (isChange) event = eventFront + [value: sendValue, isStateChange: true, displayed: true]
 			} else if (name=="heatMode" || name=="coolMode" || name=="autoMode" || name=="auxHeatMode") {
 				isChange = isStateChange(device, name, value.toString())
-				if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: false]
+				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: false]
 			} else if (name=="thermostatOperatingState") {
             	generateOperatingStateEvent(value.toString())
                 return
             } else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
-                isDisplayed = isChange
-                if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
+                // isDisplayed = isChange
+                if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
             } else if (name=="weatherSymbol" && device.currentValue("timeOfDay") == "night") {
             	// Check to see if it is night time, if so change to a night symbol
                 def symbolNum = value.toInteger() + 100
                 isChange = isStateChange(device, name, symbolNum.toString())
-                isDisplayed = isChange
-				if (isChange) event << [value: symbolNum.toString(), isStateChange: isChange, displayed: isDisplayed]            
+                // isDisplayed = isChange
+				if (isChange) event = eventFront + [value: symbolNum.toString(), isStateChange: true, displayed: true]            
             } else {
 				isChange = isStateChange(device, name, value.toString())
-				isDisplayed = isChange
-				if (isChange) event << [value: value.toString(), isStateChange: isChange, displayed: isDisplayed]
+				// isDisplayed = isChange
+				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
 			}
 			LOG("Out of loop, calling sendevent(${event})", 5)
-			sendEvent(event)
+			if (event != [:]) sendEvent(event)
 		}
 		generateSetpointEvent()
 		generateStatusEvent()
