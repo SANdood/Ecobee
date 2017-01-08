@@ -107,7 +107,7 @@ def generateEvent(Map results) {
 			def linkText = getLinkText(device)
 			def isChange = false
 			def isDisplayed = true
-			def event = [name: name, linkText: linkText, handlerName: name]
+			def event = [:]  // [name: name, linkText: linkText, handlerName: name]
            
 			if (name=="temperature") {
 				def sendValue = value
@@ -122,9 +122,9 @@ def generateEvent(Map results) {
                     state.onlineState = true                   
                 }
                 
-				isChange = isTemperatureStateChange(device, name, sendValue.toString())
-				isDisplayed = isChange
-				event << [value: sendValue, isStateChange: isChange, displayed: isDisplayed]
+				isChange = isStateChange(device, name, sendValue.toString())
+				// isDisplayed = isChange
+				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 
 			} else if (name=="motion") {        
             	def sendValue = value
@@ -136,13 +136,14 @@ def generateEvent(Map results) {
                 }
                 
 				isChange = isStateChange(device, name, sendValue.toString())
-				isDisplayed = isChange
-				event << [value: sendValue.toString(), isStateChange: isChange, displayed: isDisplayed]
+				// isDisplayed = isChange
+				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue.toString(), isStateChange: true, displayed: true]
 			} else {
-            	event << [value: value.toString()]
-            
+				isChange = isStateChange(device, name, value.toString())
+				// isDisplayed = isChange
+				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: value.toString(), isStateChange: true, displayed: true]
             }
-			sendEvent(event)
+			if (event != [:]) sendEvent(event)
 		}
 	}
 }
