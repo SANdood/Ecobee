@@ -87,7 +87,8 @@ metadata {
         attribute "timeOfDate", "enum", ["day", "night"]
         attribute "lastPoll", "string"
         
-		attribute "equipmentStatus", "string"		
+		attribute "equipmentStatus", "string"
+		attribute "humiditySetpoint", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -744,12 +745,12 @@ def generateQuickEvent(name, value, pollIn) {
 }
 
 def generateFanModeEvent(fanMode) {
-	sendEvent(name: "thermostatFanMode", value: fanMode, descriptionText: "$device.displayName fan is in ${mode} mode", displayed: true)
+	sendEvent(name: "thermostatFanMode", value: fanMode, descriptionText: "${device.displayName} fan is in ${mode} mode", displayed: true)
 }
 
 def generateOperatingStateEvent(operatingState) {
 	LOG("generateOperatingStateEvent with state: ${operatingState}", 4)
-	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "$device.displayName is ${operatingState}", displayed: true)
+	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "${device.displayName} is ${operatingState}", displayed: true)
 }
 
 
@@ -1161,7 +1162,7 @@ def generateStatusEvent() {
 
 //generate custom mobile activity feeds event
 def generateActivityFeedsEvent(notificationMessage) {
-	sendEvent(name: "notificationMessage", value: "$device.displayName $notificationMessage", descriptionText: "$device.displayName $notificationMessage", displayed: true)
+	sendEvent(name: "notificationMessage", value: "${device.displayName} ${notificationMessage}", descriptionText: "${device.displayName} ${notificationMessage}", displayed: true)
 }
 
 def noOp() {
