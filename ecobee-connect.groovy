@@ -1310,6 +1310,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 	if (forcePoll || atomicState.thermostatUpdated) {
 		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true"'
 		LOG("pollEcobeeAPI() - getting thermostat", 3)
+        atomicState.getWeather = true			// get the weather any time that the thermostat object is updated (the next time that runtime is updated)
 	}
 	if (forcePoll || atomicState.runtimeUpdated) {
 		jsonRequestBody += ',"includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true"'
@@ -1535,8 +1536,9 @@ def updateSensorData() {
 					}
 				}
                                             				
-				def sensorData = [
-					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", 1))					
+				def sensorData = [ decimalPrecision: tempDecimals ]
+				sensorData << [
+					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", tempDecimals.toInteger()))					
 				]
                 if (occupancy != "") {
                 	sensorData << [ motion: occupancy ]
@@ -1661,6 +1663,7 @@ def updateThermostatData() {
 		}
 		
 		def data = [
+        	decimalPrecision: tempDecimals,
 			temperatureScale: getTemperatureScale(),
 			lastPoll: atomicState.lastPollDate,
 			apiConnected: apiConnected(),
