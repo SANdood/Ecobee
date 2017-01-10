@@ -281,7 +281,7 @@ def preferencesPage() {
         	input(name: "holdType", title:"Select Hold Type", type: "enum", required:false, multiple:false, defaultValue:  "Until I Change", description: "Until I Change", metadata:[values:["Until I Change", "Until Next Program"]])
             paragraph "The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode."
             input(name: "smartAuto", title:"Use Smart Auto Temperature Adjust?", type: "bool", required:false, defaultValue: false, description: "")
-            input(name: "pollingInterval", title:"Polling Interval (in Minutes)", type: "enum", required:false, multiple:false, defaultValue:5, description: "5", options:["1", "3", "5", "10", "15", "30"])
+            input(name: "pollingInterval", title:"Polling Interval (in Minutes)", type: "enum", required:false, multiple:false, defaultValue:5, description: "5", options:["1", "2", "3", "5", "10", "15", "30"])
             input(name: "debugLevel", title:"Debugging Level (higher # for more information)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", metadata:[values:["5", "4", "3", "2", "1", "0"]])            
             paragraph "Showing a Thermostat as a separate Sensor is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) temperature displayed on the Thermostat"
             input(name: "showThermsAsSensor", title:"Include Thermostats as a separate Ecobee Sensor?", type: "bool", required:false, defaultValue: false, description: "")
@@ -761,6 +761,7 @@ def initialize() {
     atomicState.lastRevisions = "foo"
     atomicState.latestRevisions = "bar"
     atomicState.skipCount = 0
+	atomicState.weatherCount = (pollingInterval.toInteger() <= 10)? (10 / pollingInterval.toInteger()) : 1
     
     atomicState.timeOfDay = getTimeOfDay()
     
@@ -1498,7 +1499,7 @@ def updateSensorData() {
                     	LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
                         if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
 							temperature = cap.value as Double
-							temperature = wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
+							temperature = (temperature / 10).toDouble().round(tempDecimals.toInteger())
                         } else if (cap.value == "unknown") {
                         	// TODO: Do something here to mark the sensor as offline?
                             LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
@@ -1583,10 +1584,10 @@ def updateThermostatData() {
         }        
         
         def usingMetric = wantMetric() // cache the value to save the function calls
-        def tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[i].actualTemperature.toDouble() / 10), "F", (usingMetric ? 1 : 1))
-        def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredHeat.toDouble() / 10), "F", (usingMetric ? 1 : 1))
-        def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredCool.toDouble() / 10), "F", (usingMetric ? 1 : 1))
-        def tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[i].forecasts[0].temperature.toDouble() / 10)), "F", (usingMetric ? 1 : 1))
+        def tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[i].actualTemperature.toDouble() / 10), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
+        def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredHeat.toDouble() / 10), "F", settings.tempDecimals.toInteger())
+        def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredCool.toDouble() / 10), "F", settings.tempDecimals.toInteger())
+        def tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[i].forecasts[0].temperature.toDouble() / 10)), "F", settings.tempDecimals.toInteger())
                 
         def currentClimateName = ""
 		def currentClimateId = ""
@@ -1656,9 +1657,9 @@ def updateThermostatData() {
 			currentProgramName: currentClimateName,
 			currentProgramId: currentClimateId,
 			auxHeatMode: (atomicState.settings[i].hasHeatPump) && (atomicState.settings[i].hasForcedAir || atomicState.settings[i].hasElectric || atomicState.settings[i].hasBoiler),
-			temperature: usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
-			heatingSetpoint: usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
-			coolingSetpoint: usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
+			temperature:  String.format("%.${settings.tempDecimals}f", tempTemperature),  // usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
+			heatingSetpoint: String.format("%.${settings.tempDecimals}f", tempHeatingSetpoint), //usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
+			coolingSetpoint: String.format("%.${settings.tempDecimals}f", tempCoolingSetpoint), //usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
 			thermostatMode: statMode,
 			thermostatFanMode: currentFanMode,
 			humidity: atomicState.runtime[i].actualHumidity,
@@ -1668,13 +1669,14 @@ def updateThermostatData() {
 			thermostatOperatingState: getThermostatOperatingState(equipStatus),
 			timeOfDay: atomicState.timeOfDay,
 			weatherSymbol: atomicState.weather[i].forecasts[0].weatherSymbol.toString(),
-			weatherTemperature: usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
+			weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
 		] 
 		
-		data["temperature"] = data["temperature"] ? ( wantMetric() ? data["temperature"].toDouble() : data["temperature"].toDouble().round(1) /*.toInteger()*/ ) : data["temperature"]
-		data["heatingSetpoint"] = data["heatingSetpoint"] ? ( wantMetric() ? data["heatingSetpoint"].toDouble() : data["heatingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["heatingSetpoint"]
-		data["coolingSetpoint"] = data["coolingSetpoint"] ? ( wantMetric() ? data["coolingSetpoint"].toDouble() : data["coolingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["coolingSetpoint"]
-		data["weatherTemperature"] = data["weatherTemperature"] ? ( wantMetric() ? data["weatherTemperature"].toDouble() : data["weatherTemperature"].toDouble().round(1) /*.toInteger()*/ ) : data["weatherTemperature"]
+		// data["temperature"] = data["temperature"] ? ( wantMetric() ? data["temperature"].toDouble() : data["temperature"].toDouble().round(1) /*.toInteger()*/ ) : data["temperature"]
+		// data["heatingSetpoint"] = data["heatingSetpoint"] ? ( wantMetric() ? data["heatingSetpoint"].toDouble() : data["heatingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["heatingSetpoint"]
+		// data["coolingSetpoint"] = data["coolingSetpoint"] ? ( wantMetric() ? data["coolingSetpoint"].toDouble() : data["coolingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["coolingSetpoint"]
+		// data["weatherTemperature"] = data["weatherTemperature"] ? ( wantMetric() ? data["weatherTemperature"].toDouble() : data["weatherTemperature"].toDouble().round(1) /*.toInteger()*/ ) : data["weatherTemperature"]
+        
         climateData.each { climate ->
         	LOG("Climate found: ${climate}", 5)
             
@@ -2015,12 +2017,9 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
 def setProgram(child, program, deviceId, sendHoldType=null) {
 	// NOTE: Will use only the first program if there are two with the same exact name
 	LOG("setProgram() to ${program} with DeviceID: ${deviceId}", 5, child, "debug")    
-    // def climateRef = program.toLowerCase()   
-    
-	// def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == deviceId.toString() }
 	
 	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size()) {
+	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
 		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == deviceId.toString()) index = i
 	}
 	
@@ -2028,7 +2027,7 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
 		LOG("setProgram() Ooops! - can't find thermostat!!!", 3, child, "error")
 		index = 0
 	}
-    def climates = atomicState.program[index].climates		// FIXME
+    def climates = atomicState.program[index].climates
     def climate = climates?.find { it.name.toString() == program.toString() }
     LOG("climates - {$climates}", 5, child)
     LOG("climate - {$climate}", 5, child)
@@ -2381,10 +2380,9 @@ private getFanMinOnTime(child) {
 	LOG("getFanMinOnTime() - Looking up current fanMinOnTime for ${child}", 4, child)
     def devId = getChildThermostatDeviceIdsString(child)
     LOG("getFanMinOnTime() Looking for ecobee thermostat ${devId}", 5, child, "trace")
-    
-    // def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
+
 	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size()) {
+	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
 		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
 	}
 	
@@ -2392,7 +2390,7 @@ private getFanMinOnTime(child) {
 		LOG("getFanMinOnTime() Ooops! - can't find thermostat!!!", 3, child, "error")
 		index = 0
 	}
-    def fanMinOnTime = atomicState.settings[index].fanMinOnTime		// FIXME
+    def fanMinOnTime = atomicState.settings[index].fanMinOnTime
     LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
 	return fanMinOnTime
 }
@@ -2402,9 +2400,8 @@ private getHVACMode(child) {
     def devId = getChildThermostatDeviceIdsString(child)
     LOG("getHVACMode() Looking for ecobee thermostat ${devId}", 5, child, "trace")
     
-    //def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
 	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size()) {
+	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
 		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
 	}
 	
@@ -2412,7 +2409,7 @@ private getHVACMode(child) {
 		LOG("getHVACMode() Ooops! - can't find thermostat!!!", 3, child, "error")
 		index = 0
 	}
-    def hvacMode = atomicState.settings[index].hvacMode		// FIXME
+    def hvacMode = atomicState.settings[index].hvacMode
 	LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
 	return hvacMode
 }
@@ -2423,9 +2420,8 @@ def getAvailablePrograms(thermostat) {
     def devId = getChildThermostatDeviceIdsString(thermostat)
     LOG("Looking for ecobee thermostat ${devId}", 5, thermostat, "trace")
     
-    // def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
 	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size()) {
+	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
 		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
 	}
 	
