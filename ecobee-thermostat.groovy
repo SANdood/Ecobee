@@ -90,6 +90,8 @@ metadata {
 		attribute "equipmentStatus", "string"
         attribute "humiditySetpoint", "string"
         attribute "weatherTemperature", "number"
+		attribute "decimalPrecision", "number"
+		attribute "temperatureDisplay", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -108,8 +110,8 @@ metadata {
     	tiles(scale: 2) {      
               
 		multiAttributeTile(name:"tempSummary", type:"thermostat", width:6, height:4) {
-			tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-				attributeState("default", label:'${currentValue}°', unit:"dF")
+			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
+				attributeState("default", label:'${currentValue}', unit:"dF")
 			}
 
 			tileAttribute("device.temperature", key: "VALUE_CONTROL") {
@@ -485,6 +487,7 @@ def generateEvent(Map results) {
 	def linkText = getLinkText(device)
 
 	if(results) {
+		String tempDisplay = ""
 		results.each { name, value ->
 			LOG("generateEvent() - In each loop: name: ${name}  value: ${value}", 4)
 			def isChange = false
@@ -499,6 +502,16 @@ def generateEvent(Map results) {
 				// isDisplayed = isChange
 				// Only send changed events/values
 				if (isChange) event = eventFront + [value: sendValue, isStateChange: true, displayed: true]
+				if (name=="temperature") {
+					// Generate the display value that will preserve decimal positions ending in 0
+					def precision = device.currentValue("decimalPrecision")
+                    if (!precision) precision = (getTemperatureScale() == "C") ? 1 : 0
+                    if (precision == 0) {
+                    	tempDisplay = Math.round(value.toDouble())
+                    } else {
+						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision.toInteger())) + '°'
+                    }
+				}
 			} else if (name=="heatMode" || name=="coolMode" || name=="autoMode" || name=="auxHeatMode") {
 				isChange = isStateChange(device, name, value.toString())
 				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: false]
@@ -524,6 +537,7 @@ def generateEvent(Map results) {
 			LOG("Out of loop, calling sendevent(${event})", 5)
 			if (event != [:]) sendEvent(event)
 		}
+		if (tempDisplay) sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: false)
 		generateSetpointEvent()
 		generateStatusEvent()
 	}
@@ -531,23 +545,41 @@ def generateEvent(Map results) {
 
 //return descriptionText to be shown on mobile activity feed
 private getThermostatDescriptionText(name, value, linkText) {
-	if(name == "temperature") {
-		return "$linkText temperature is ${value}°"
 
-	} else if(name == "heatingSetpoint") {
-		return "heating setpoint is ${value}°"
-
-	} else if(name == "coolingSetpoint"){
-		return "cooling setpoint is ${value}°"
-
-	} else if (name == "thermostatMode") {
-		return "thermostat mode is ${value}"
-
-	} else if (name == "thermostatFanMode") {
-		return "thermostat fan mode is ${value}"
-
-	} else {
-		return "${name} = ${value}"
+	switch (name) {
+		case 'temperature':
+			return "${linkText} temperature is ${value}°"
+            break;
+		case 'heatingSetpoint':
+			return "heating setpoint is ${value}°"
+            break;
+        case 'coolingSetpoint':
+			return "cooling setpoint is ${value}°"
+            break;
+		case 'thermostatMode':
+			return "thermostat mode is ${value}"
+            break;
+        case 'thermostatFanMode':
+			return "thermostat fan mode is ${value}"
+            break;
+        case 'decimalPrecision':
+        	return "Decimal precision set to ${value}"
+            break;
+        case 'equipmentStatus':
+        	return "Equipment running: ${value}"
+            break;
+        case 'lastPoll':
+        	return "Polled @ ${value}"
+            break;
+        case 'humidity':
+        	return "Humidity is ${value}%"
+            break;
+        case 'humiditySetpoint':
+        	return "Humidity Setpoint is ${value}%"
+            break;
+		default:
+			return "${name} = ${value}"
+            break;
 	}
 }
 
@@ -746,12 +778,12 @@ def generateQuickEvent(name, value, pollIn) {
 }
 
 def generateFanModeEvent(fanMode) {
-	sendEvent(name: "thermostatFanMode", value: fanMode, descriptionText: "${device.displayName} fan is in ${mode} mode", displayed: true)
+	sendEvent(name: "thermostatFanMode", value: fanMode, descriptionText: "Thermostat fan is in ${mode} mode", displayed: true)
 }
 
 def generateOperatingStateEvent(operatingState) {
 	LOG("generateOperatingStateEvent with state: ${operatingState}", 4)
-	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "${device.displayName} is ${operatingState}", displayed: true)
+	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "Thermostat is ${operatingState}", displayed: true)
 }
 
 
