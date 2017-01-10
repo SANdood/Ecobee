@@ -26,6 +26,9 @@ metadata {
 		capability "Motion Sensor"
 		capability "Refresh"
 		capability "Polling"
+		
+		attribute "decimalPrecision", "number"
+		attribute "temperatureDisplay", "string"
 	}
 
 	simulator {
@@ -103,6 +106,7 @@ void poll() {
 def generateEvent(Map results) {	
 	log.debug "generateEvent(): parsing data $results. F or C? ${getTemperatureScale()}"
 	if(results) {
+		String tempDisplay = ""
 		results.each { name, value ->			
 			def linkText = getLinkText(device)
 			def isChange = false
@@ -119,13 +123,22 @@ def generateEvent(Map results) {
                     sendValue = "unknown"
                 } else {
                 	// must be online
-                    state.onlineState = true                   
+                    state.onlineState = true   
+					
+                    // Generate the display value that will preserve decimal positions ending in 0
+					Integer precision = device.currentValue("decimalPrecision")
+                    if (!precision) precision = (getTemperatureScale() == "C") ? 1 : 0
+                    if (precision == 0) {
+                    	tempDisplay = Math.round(value)
+                    } else {
+						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision)) + '°'
+                    }
                 }
                 
 				isChange = isStateChange(device, name, sendValue.toString())
 				// isDisplayed = isChange
 				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
-
+				
 			} else if (name=="motion") {        
             	def sendValue = value
             
@@ -145,16 +158,17 @@ def generateEvent(Map results) {
             }
 			if (event != [:]) sendEvent(event)
 		}
+		if (tempDisplay) {
+			log.info "Sending temperatureDisplay: ${tempDisplay}"
+			sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: true)
+		}
 	}
 }
-
-
 
 //generate custom mobile activity feeds event
 def generateActivityFeedsEvent(notificationMessage) {
 	sendEvent(name: "notificationMessage", value: "$device.displayName $notificationMessage", descriptionText: "$device.displayName $notificationMessage", displayed: true)
 }
-
 
 private debugLevel(level=3) {
 	def debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
@@ -162,8 +176,6 @@ private debugLevel(level=3) {
     
     return ( debugLvlNum >= wantedLvl )
 }
-
-
 
 private def LOG(message, level=3, child=null, logType="debug", event=false, displayEvent=false) {
 	def prefix = ""
@@ -174,7 +186,6 @@ private def LOG(message, level=3, child=null, logType="debug", event=false, disp
         if (event) { debugEvent(message, displayEvent) }        
 	}    
 }
-
 
 private def debugEvent(message, displayEvent = false) {
 
