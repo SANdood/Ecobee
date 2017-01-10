@@ -1342,24 +1342,24 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 		httpGet(pollParams) { resp ->
 			if(resp.status == 200) {
 				// LOG("poll results returned resp.data ${resp.data}", 2)
-				atomicState.thermostatData = resp.data		// this now only stores the most recent collection of changed data
+				if (resp.data) atomicState.thermostatData = resp.data		// this now only stores the most recent collection of changed data
 															// this may not be the entire set of data, so the rest of this code will
 															// calculate updates from the individual data objects (which always include
 															// the latest values recieved
 				// save the collected objects
 				if (forcePoll || atomicState.thermostatUpdated) {
-					atomicState.settings = resp.data.thermostatList.settings
-					atomicState.program = resp.data.thermostatList.program
-					atomicState.events = resp.data.thermostatList.events
+					if (resp.data.thermostatList.settings) atomicState.settings = resp.data.thermostatList.settings
+					if (resp.data.thermostatList.program) atomicState.program = resp.data.thermostatList.program
+					if (resp.data.thermostatList.events) atomicState.events = resp.data.thermostatList.events
 				}
 				if (forcePoll || atomicState.runtimeUpdated) {
-					atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
-					atomicState.runtime = resp.data.thermostatList.runtime
-					if (atomicState.getWeather) {			// we don't always ask for the weather any more
+					if (resp.data.thermostatList.remoteSensors) atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
+					if (resp.data.thermostatList.runtime) atomicState.runtime = resp.data.thermostatList.runtime
+					if (atomicState.getWeather && resp.data.thermostatList.weather) {			// we don't always ask for the weather any more
                     	atomicState.weather = resp.data.thermostatList.weather
                         atomicState.getWeather = false
                     }
-					atomicState.equipmentStatus = resp.data.thermostatList.equipmentStatus
+					if (resp.data.thermostatList.equipmentStatus) atomicState.equipmentStatus = resp.data.thermostatList.equipmentStatus
 				}
                 updateLastPoll()
                
@@ -2462,6 +2462,7 @@ def getAvailablePrograms(thermostat) {
     return climates?.collect { it.name }
 }
 
+
 private def whatHoldType() {
 	def sendHoldType = settings.holdType ? (settings.holdType=="Temporary" || settings.holdType=="Until Next Program")? "nextTransition" : (settings.holdType=="Permanent" || settings.holdType=="Until I Change")? "indefinite" : "indefinite" : "indefinite"
 	LOG("Entered whatHoldType() with ${sendHoldType}  settings.holdType == ${settings.holdType}")
@@ -2482,6 +2483,7 @@ private debugLevel(level=3) {
 	return ( debugLvlNum >= wantedLvl )
     
 }
+
 
 // Mark the poll data as "dirty" to allow a new API call to take place
 private def dirtyPollData() {
