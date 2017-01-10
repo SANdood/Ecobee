@@ -130,7 +130,7 @@ def generateEvent(Map results) {
 					def precision = device.currentValue("decimalPrecision")
                     if (!precision) precision = (tempScale == "C") ? 1 : 0
                     if (precision == 0) {
-                    	tempDisplay = Math.round(value)
+                    	tempDisplay = Math.round(value.toDouble())
                     } else {
 						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision.toInteger())) + '°'
                     }
