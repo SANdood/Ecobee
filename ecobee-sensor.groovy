@@ -103,8 +103,9 @@ void poll() {
 }
 
 
-def generateEvent(Map results) {	
-	log.debug "generateEvent(): parsing data $results. F or C? ${getTemperatureScale()}"
+def generateEvent(Map results) {
+	def tempScale = getTemperatureScale()
+	log.debug "generateEvent(): parsing data $results. F or C? ${tempScale}"
 	if(results) {
 		String tempDisplay = ""
 		results.each { name, value ->			
@@ -126,12 +127,12 @@ def generateEvent(Map results) {
                     state.onlineState = true   
 					
                     // Generate the display value that will preserve decimal positions ending in 0
-					Integer precision = device.currentValue("decimalPrecision")
-                    if (!precision) precision = (getTemperatureScale() == "C") ? 1 : 0
+					def precision = device.currentValue("decimalPrecision")
+                    if (!precision) precision = (tempScale == "C") ? 1 : 0
                     if (precision == 0) {
                     	tempDisplay = Math.round(value)
                     } else {
-						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision)) + '°'
+						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision.toInteger())) + '°'
                     }
                 }
                 
@@ -159,8 +160,7 @@ def generateEvent(Map results) {
 			if (event != [:]) sendEvent(event)
 		}
 		if (tempDisplay) {
-			log.info "Sending temperatureDisplay: ${tempDisplay}"
-			sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: true)
+			sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: false)
 		}
 	}
 }
