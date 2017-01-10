@@ -92,6 +92,7 @@ metadata {
         attribute "weatherTemperature", "number"
 		attribute "decimalPrecision", "number"
 		attribute "temperatureDisplay", "string"
+		attribute "equipmentOperatingState", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -107,7 +108,7 @@ metadata {
 
 	simulator { }
 
-    	tiles(scale: 2) {      
+    tiles(scale: 2) {      
               
 		multiAttributeTile(name:"tempSummary", type:"thermostat", width:6, height:4) {
 			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
@@ -139,7 +140,7 @@ metadata {
 				attributeState("default", label:'${currentValue}°', unit:"dF")
 			}
 
-        } // End multiAttributeTile
+		} // End multiAttributeTile
         
 
         // Workaround until they fix the Thermostat multiAttributeTile. Only use this one OR the above one, not both
@@ -344,6 +345,18 @@ metadata {
             // Issue reported that the label overlaps. Need to remove the icon
             state "default", label: '${currentValue}', icon: "st.nest.empty"
 		}
+			
+		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+			state "idle", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_idle.png"
+            state "fan only", action:"noOp", label: "fan only", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_fan.png"
+			state "heat 1", action:"noOp", label: "heat 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+			state "heat 2", action:"noOp", label: "heat 2", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+			state "heat 3", action:"noOp", label: "heat 3", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+			state "cool 1", action:"noOp", label: "cool 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_cool.png"
+			state "cool 2", action:"noOp", label: "cool 2", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_cool.png"
+            // Issue reported that the label overlaps. Need to remove the icon
+            state "default", action:"noOp", label: '${currentValue}', icon: "st.nest.empty"
+		}
 
         valueTile("humidity", "device.humidity", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
 			state "default", label: 'Humidity\n${currentValue}%', unit: "humidity" // Add a blue background signifying water?
@@ -434,9 +447,9 @@ metadata {
             // "temperature", "humidity",  "upButtonControl", "thermostatSetpoint", 
             // "currentStatus", "downButtonControl",
             
-        	"operatingState", "weatherIcon", "refresh", 
+        	/* "operatingState", */  "equipmentState", "weatherIcon",  "refresh",  
             "currentProgramIcon", "weatherTemperature", "motionState", 
-            "modeShow", "fanModeLabeled", "resumeProgram",
+            "modeShow", "fanModeLabeled",  "resumeProgram", 
             
             "oneBuffer", "commandDivider", "oneBuffer",
             "coolSliderControl", "coolingSetpoint",
@@ -518,6 +531,8 @@ def generateEvent(Map results) {
 			} else if (name=="thermostatOperatingState") {
             	generateOperatingStateEvent(value.toString())
                 return
+			} else if (name=="equipmentStatus") {
+				generateEquipmentStatusEvent(value)
             } else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
@@ -786,6 +801,23 @@ def generateOperatingStateEvent(operatingState) {
 	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "Thermostat is ${operatingState}", displayed: true)
 }
 
+def generateEquipmentStatusEvent(equipmentStatus) {
+	String equipStat = ""
+	if ((equipmentStatus.size() == 0) || (equipmentStatus == "idle")) { equipStat = "idle" }
+	else if (equipmentStatus == "fan") { equipStat = "fan only" }
+	else if (equipmentStatus.contains("eat")) {
+		if (equipmentStatus.contains("eat1")) { equipStat = "heat 1" }
+		else if (equipmentStatus.contains("eat2")) { equipStat = "heat 2" }
+		else if (equipmentStatus.contains("eat 3")) { equipStat = "heat 3" }
+		else if (equipmentStatus.contains("heatPump")) { equipStat = "heat 1" }
+		else if (equipmentStatus.contains("ump2")) { equipStat = "heat 2" }
+		else if (equipmentStatus.contains("ump3")) { equipStat = "heat 3" }
+	} else if (equipmentStatus.contains("ool")) {
+		if (equipmentStatus.contains("ool1")) { equipStat = "cool 1" }
+		else if (equipmentStatus.contains("ool2")) { equipStat = "cool 2" }		
+	}
+	sendEvent( name: "equipmentOperatingState", value: equipStat, displayed: true)		 
+}
 
 def setThermostatMode(String value) {
 	// 	"emergencyHeat" "heat" "cool" "off" "auto"
