@@ -88,7 +88,8 @@ metadata {
         attribute "lastPoll", "string"
         
 		attribute "equipmentStatus", "string"
-		attribute "humiditySetpoint", "string"
+        attribute "humiditySetpoint", "string"
+        attribute "weatherTemperature", "number"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -108,7 +109,7 @@ metadata {
               
 		multiAttributeTile(name:"tempSummary", type:"thermostat", width:6, height:4) {
 			tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-				attributeState("default", label:'${currentValue}', unit:"dF")
+				attributeState("default", label:'${currentValue}°', unit:"dF")
 			}
 
 			tileAttribute("device.temperature", key: "VALUE_CONTROL") {
@@ -130,10 +131,10 @@ metadata {
                 attributeState("auto", label:'${name}')
 			}
             tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
-            	attributeState("default", label:'${currentValue}', unit:"dF")
+            	attributeState("default", label:'${currentValue}°', unit:"dF")
             }
 			tileAttribute("device.coolingSetpoint", key: "COOLING_SETPOINT") {
-				attributeState("default", label:'${currentValue}', unit:"dF")
+				attributeState("default", label:'${currentValue}°', unit:"dF")
 			}
 
         } // End multiAttributeTile
@@ -167,10 +168,10 @@ metadata {
                 attributeState("auto", label:'${name}')
 			}
             tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
-            	attributeState("default", label:'${currentValue}', unit:"dF")
+            	attributeState("default", label:'${currentValue}°', unit:"dF")
             }
 			tileAttribute("device.coolingSetpoint", key: "COOLING_SETPOINT") {
-				attributeState("default", label:'${currentValue}', unit:"dF")
+				attributeState("default", label:'${currentValue}°', unit:"dF")
 			}
 
         }
@@ -492,7 +493,7 @@ def generateEvent(Map results) {
 			def event = [:]
 			
 			if (name=="temperature" || name=="heatingSetpoint" || name=="coolingSetpoint" || name=="weatherTemperature" ) {
-				def sendValue = value // ? convertTemperatureIfNeeded(value.toDouble(), "F", 1): value //API return temperature value in F
+				String sendValue = value as String // ? convertTemperatureIfNeeded(value.toDouble(), "F", 1): value //API return temperature value in F
                 LOG("generateEvent(): Temperature value: ${sendValue}", 5, this, "trace")
 				isChange = isStateChange(device, name, value.toString())
 				// isDisplayed = isChange
