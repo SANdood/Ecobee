@@ -569,7 +569,7 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Equipment running: ${value}"
             break;
         case 'lastPoll':
-        	return "Polled @ ${value}"
+        	return "Poll ${value}"
             break;
         case 'humidity':
         	return "Humidity is ${value}%"
