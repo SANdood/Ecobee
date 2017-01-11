@@ -97,6 +97,7 @@ metadata {
 		attribute "heatMode", "string"
         attribute "autoMode", "string"
 		attribute "auxHeatMode", "string"
+		attribute "motion", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
