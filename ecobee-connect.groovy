@@ -1618,13 +1618,14 @@ def updateThermostatData() {
     	def runningEvent = null
         def currentClimateName = ""
 		def currentClimateId = ""
+        def currentClimate = ""
         def currentFanMode = ""
 		
 		// what program is supposed to be running now?
 		def scheduledClimateId = atomicState.program[i].currentClimateRef
 		def scheduledClimateName = ""
 		if (scheduledClimateId) { 
-            	ClimateName = (atomicState.program[i].climates.find { currentClimateId }).name
+            	scheduledClimateName = (atomicState.program[i].climates.find { scheduledClimateId }).name
 		}
 		
 		// check which program is actually running now
@@ -1635,10 +1636,11 @@ def updateThermostatData() {
             }        	
 		}             
         if (runningEvent) {         	
-            LOG("Found a running Event: ${runningEvent}", 4) 
+            LOG("Found a running Event: ${runningEvent}", 3) 
             def tempClimateRef = runningEvent.holdClimateRef ?: ""
         	if ( runningEvent.type == "hold" ) {
-               	currentClimateName = "Hold" + (runningEvent.holdClimateRef ? ": ${runningEvent.holdClimateRef.capitalize()}" : "")
+				currentClimate = (tempClimateRef ? (atomicState.program[i].climates.find { tempClimateRef }).name : "")
+               	currentClimateName = "Hold" + currentClimate
 			} else if (runningEvent.type == "vacation" ) {
                	currentClimateName = "Vacation"
             } else if (runningEvent.type == "quickSave" ) {
@@ -1713,8 +1715,8 @@ def updateThermostatData() {
             	coolRangeLow: atomicState.settings[i].coolRangeLow,
 				currentProgramName: currentClimateName,
 				currentProgramId: currentClimateId,
-				currentProgram: currentClimateName,
-				scheduledProgramName: currentClimateName,
+				currentProgram: currentClimate,
+				scheduledProgramName: scheduledClimateName,
 				scheduledProgramId: scheduledClimateId,
 				scheduledProgram: scheduledClimateName,
             	hasHeatPump: atomicState.settings[i].hasHeatPump,
