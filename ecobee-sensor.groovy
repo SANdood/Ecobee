@@ -35,38 +35,22 @@ metadata {
 		// TODO: define status and reply messages here
 	}
 
-	tiles (scale: 2) { 
-
+	tiles(scale: 2) {
+		multiAttributeTile(name:"temperatureDisplay", type: "generic", width: 6, height: 4){
+			tileAttribute ("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
+				attributeState("temperatureDisplay", label:'\n${currentValue}',
+					backgroundColors: getTempColors())
+			}
+			tileAttribute ("device.motion", key: "SECONDARY_CONTROL") {
+                attributeState "active", action:"noOp", nextState: "active", label:"Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_motion.png"
+				attributeState "inactive", action: "noOp", nextState: "inactive", label:"No Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_nomotion.png"
+            	attributeState "unkown", action: "noOp", label:"Offline", nextState: "unkown", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_noconnection.png"
+           	 	attributeState "not supported", action: "noOp", nextState: "not supported", label: "N/A", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/notsupported_x.png"
+            }
+		}
 		valueTile("temperature", "device.temperature", width: 4, height: 4) {
             state("temperature", defaultState: true, label:'${currentValue}°', unit:"dF",
-				backgroundColors:[
-                	// Celsius Color Range
-					[value: 0, color: "#1e9cbb"],
-					[value: 15, color: "#1e9cbb"],
-					[value: 19, color: "#1e9cbb"],
-                    
-					[value: 21, color: "#44b621"],
-					[value: 22, color: "#44b621"],
-					[value: 24, color: "#44b621"],
-                    
-					[value: 21, color: "#d04e00"],
-					[value: 35, color: "#d04e00"],
-					[value: 37, color: "#d04e00"],
-					// Fahrenheit Color Range
-                	[value: 40, color: "#1e9cbb"],
-					[value: 59, color: "#1e9cbb"],
-					[value: 67, color: "#1e9cbb"],
-                    
-					[value: 69, color: "#44b621"], 
-					[value: 72, color: "#44b621"],
-					[value: 74, color: "#44b621"],
-                    
-					[value: 76, color: "#d04e00"],
-					[value: 95, color: "#d04e00"],
-					[value: 99, color: "#d04e00"],
-					[value: 99, color: "#d04e00"],
-					[value: 451, color: "#ffa81e"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
-				]
+				backgroundColors: getTempColors()
 			)
 		}
 
@@ -87,8 +71,8 @@ metadata {
 		}
 
 
-		main (["temperature","motion"])
-		details(["temperature","motion","refresh"])
+		main (["temperatureDisplay",])
+		details(["temperatureDisplay","refresh"])
 	}
 }
 
@@ -196,4 +180,37 @@ private def debugEvent(message, displayEvent = false) {
 	]
 	if ( debugLevel(4) ) { log.debug "Generating AppDebug Event: ${results}" }
 	sendEvent (results)
+}
+	
+def getTempColors() {
+	def colorMap
+
+	colorMap = [
+		// Celsius Color Range
+		[value: 0, color: "#1e9cbb"],
+		[value: 15, color: "#1e9cbb"],
+		[value: 19, color: "#1e9cbb"],
+
+		[value: 21, color: "#44b621"],
+		[value: 22, color: "#44b621"],
+		[value: 24, color: "#44b621"],
+
+		[value: 21, color: "#d04e00"],
+		[value: 35, color: "#d04e00"],
+		[value: 37, color: "#d04e00"],
+		// Fahrenheit Color Range
+		[value: 40, color: "#1e9cbb"],
+		[value: 59, color: "#1e9cbb"],
+		[value: 67, color: "#1e9cbb"],
+
+		[value: 69, color: "#44b621"],
+		[value: 72, color: "#44b621"],
+		[value: 74, color: "#44b621"],
+
+		[value: 76, color: "#d04e00"],
+		[value: 95, color: "#d04e00"],
+		[value: 99, color: "#d04e00"],
+        
+        [value: 451, color: "#ffa81e"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
+	]
 }
