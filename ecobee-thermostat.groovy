@@ -93,6 +93,10 @@ metadata {
 		attribute "decimalPrecision", "number"
 		attribute "temperatureDisplay", "string"
 		attribute "equipmentOperatingState", "string"
+        attribute "coolMode", "string"
+		attribute "heatMode", "string"
+        attribute "autoMode", "string"
+		attribute "auxHeatMode", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -349,7 +353,9 @@ metadata {
 		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "idle", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_idle.png"
             state "fan only", action:"noOp", label: "fan only", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_fan.png"
-			state "heat 1", action:"noOp", label: "heat 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+			state "emergency", action:"noOp", label: "emergency", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+            state "heat pump", action:"noOp", label: "heat pump", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
+            state "heat 1", action:"noOp", label: "heat 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
 			state "heat 2", action:"noOp", label: "heat 2", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
 			state "heat 3", action:"noOp", label: "heat 3", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
 			state "cool 1", action:"noOp", label: "cool 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_cool.png"
@@ -566,16 +572,19 @@ private getThermostatDescriptionText(name, value, linkText) {
 			return "${linkText} temperature is ${value}°"
             break;
 		case 'heatingSetpoint':
-			return "heating setpoint is ${value}°"
+			return "Heating setpoint is ${value}°"
             break;
         case 'coolingSetpoint':
-			return "cooling setpoint is ${value}°"
+			return "Cooling setpoint is ${value}°"
             break;
 		case 'thermostatMode':
-			return "thermostat mode is ${value}"
+			return "Thermostat mode is ${value}"
             break;
         case 'thermostatFanMode':
-			return "thermostat fan mode is ${value}"
+			return "Thermostat fan mode is ${value}"
+            break;
+        case 'weatherTemperature':
+        	return "Outside temperature is ${value}°"
             break;
         case 'decimalPrecision':
         	return "Decimal precision set to ${value}"
@@ -590,7 +599,7 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Humidity is ${value}%"
             break;
         case 'humiditySetpoint':
-        	return "Humidity Setpoint is ${value}%"
+        	return "Humidity setpoint is ${value}%"
             break;
 		default:
 			return "${name} = ${value}"
@@ -806,17 +815,20 @@ def generateEquipmentStatusEvent(equipmentStatus) {
 	if ((equipmentStatus.size() == 0) || (equipmentStatus == "idle")) { equipStat = "idle" }
 	else if (equipmentStatus == "fan") { equipStat = "fan only" }
 	else if (equipmentStatus.contains("eat")) {
-		if (equipmentStatus.contains("eat1")) { equipStat = "heat 1" }
+		if (equipmentStatus.contains("eat1")) { 
+        	if (device.currentValue("auxHeat") == "true") { equipStatus = "emergency" }
+            else { equipStat = "heat 1" }
+        }
 		else if (equipmentStatus.contains("eat2")) { equipStat = "heat 2" }
-		else if (equipmentStatus.contains("eat 3")) { equipStat = "heat 3" }
-		else if (equipmentStatus.contains("heatPump")) { equipStat = "heat 1" }
+		else if (equipmentStatus.contains("eat3")) { equipStat = "heat 3" }
 		else if (equipmentStatus.contains("ump2")) { equipStat = "heat 2" }
 		else if (equipmentStatus.contains("ump3")) { equipStat = "heat 3" }
+		else if (equipmentStatus.contains("Pump")) { equipStat = "heat pump" }
 	} else if (equipmentStatus.contains("ool")) {
 		if (equipmentStatus.contains("ool1")) { equipStat = "cool 1" }
 		else if (equipmentStatus.contains("ool2")) { equipStat = "cool 2" }		
 	}
-	sendEvent( name: "equipmentOperatingState", value: equipStat, displayed: true)		 
+	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: true)		 
 }
 
 def setThermostatMode(String value) {
@@ -1339,6 +1351,8 @@ def getTempColors() {
 
 		[value: 76, color: "#d04e00"],
 		[value: 95, color: "#d04e00"],
-		[value: 99, color: "#d04e00"]
+		[value: 99, color: "#d04e00"],
+        
+        [value: 451, color: "#ffa81e"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
 	]
 }
