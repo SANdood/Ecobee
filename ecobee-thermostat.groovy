@@ -79,8 +79,12 @@ metadata {
 		attribute "thermostatStatus","string"
         attribute "apiConnected","string"
         
+		attribute "currentProgramName", "string"
+        attribute "currentProgramId","string"
 		attribute "currentProgram","string"
-        attribute "currentProgramId","string"		
+		attribute "scheduledProgramName", "string"
+        attribute "scheduledProgramId","string"
+		attribute "scheduledProgram","string"
         attribute "weatherSymbol", "string"        
         attribute "debugEventFromParent","string"
         attribute "logo", "string"
@@ -96,8 +100,16 @@ metadata {
         attribute "coolMode", "string"
 		attribute "heatMode", "string"
         attribute "autoMode", "string"
+		attribute "hasHeatPump", "string"
+        attribute "hasForcedAir", "string"
+        attribute "hasElectric", "string"
+        attribute "hasBoiler", "string"
 		attribute "auxHeatMode", "string"
-		attribute "motion", "string"
+        attribute "motion", "string"
+		attribute "heatRangeHigh", "number"
+		attribute "heatRangeLow", "number"
+		attribute "coolRangeHigh", "number"
+		attribute "coolRangeLow", "number"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -353,7 +365,7 @@ metadata {
 			
 		standardTile("equipmentState", "device.equipmentOperatingState", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "idle", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_idle.png"
-            state "fan only", action:"noOp", label: "fan only", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_fan.png"
+            state "fan only", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_fan.png"
 			state "emergency", action:"noOp", label: "emergency", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
             state "heat pump", action:"noOp", label: "heat pump", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
             state "heat 1", action:"noOp", label: "heat 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
@@ -361,6 +373,8 @@ metadata {
 			state "heat 3", action:"noOp", label: "heat 3", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_heat.png"
 			state "cool 1", action:"noOp", label: "cool 1", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_cool.png"
 			state "cool 2", action:"noOp", label: "cool 2", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_cool.png"
+			state "heating", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat.png"
+			state "cooling", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_cool.png"
             // Issue reported that the label overlaps. Need to remove the icon
             state "default", action:"noOp", label: '${currentValue}', icon: "st.nest.empty"
 		}
@@ -603,7 +617,7 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Humidity setpoint is ${value}%"
             break;
 		default:
-			return "${name} = ${value}"
+			return "${name} is ${value}"
             break;
 	}
 }
@@ -818,15 +832,19 @@ def generateEquipmentStatusEvent(equipmentStatus) {
 	else if (equipmentStatus.contains("eat")) {
 		if (equipmentStatus.contains("eat1")) { 
         	if (device.currentValue("auxHeat") == "true") { equipStatus = "emergency" }
-            else { equipStat = "heat 1" }
-        }
+            else { 
+				if (device.currentValue("heatStages") == 1) { equipStat = "heating" } else { equipStat = "heat 1" }
+			}
+		}
 		else if (equipmentStatus.contains("eat2")) { equipStat = "heat 2" }
 		else if (equipmentStatus.contains("eat3")) { equipStat = "heat 3" }
 		else if (equipmentStatus.contains("ump2")) { equipStat = "heat 2" }
 		else if (equipmentStatus.contains("ump3")) { equipStat = "heat 3" }
 		else if (equipmentStatus.contains("Pump")) { equipStat = "heat pump" }
 	} else if (equipmentStatus.contains("ool")) {
-		if (equipmentStatus.contains("ool1")) { equipStat = "cool 1" }
+		if (equipmentStatus.contains("ool1")) { 
+			if (device.currentValue("coolStages") == 1) { equipStat = "cooling" } else { equipStat = "cool 1" }
+		}
 		else if (equipmentStatus.contains("ool2")) { equipStat = "cool 2" }		
 	}
 	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: true)		 
