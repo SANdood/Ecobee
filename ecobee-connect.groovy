@@ -941,16 +941,20 @@ def sunsetEvent(evt) {
 def userDefinedEvent(evt) {
 	LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 4, null, "info")
     atomicState.lastUserDefinedEventDate = getTimestamp()
-    atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})"    
+    atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})" 
+    
+    if ( ((now() - atomicState.lastUserDefinedEvent) / 1000.0 / 60.0) < 0.5 ) { 
+    	LOG("userDefinedEvent() - time since last event is less than 30 seconds. Exiting without polling.", 4)
+    	return 
+ 	} 
 	poll()
+    atomicState.lastUserDefinedEvent = now()
+    atomicState.lastUserDefinedEventDate = getTimestamp()
     
 	if ( ((now() - atomicState.lastUserDefinedEvent) / 1000 / 60) < 3 ) { 
     	LOG("userDefinedEvent() - polled, but time since last event is less than 3 minutes. Exiting without performing additional actions.", 4)
     	return 
  	}    
-    atomicState.lastUserDefinedEvent = now()
-    atomicState.lastUserDefinedEventDate = getTimestamp()    
- //   poll()
     scheduleWatchdog(evt, true)
 }
 
@@ -1156,11 +1160,11 @@ def pollChildren(child = null) {
 	
     if ( (atomicState.forcePoll == true) || somethingChanged /* || ( timeSinceLastPoll > getMinMinBtwPolls().toDouble() ) */ ) {
     	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
-        LOG("Calling the Ecobee API to fetch the latest data...", 4, child)
+        LOG("pollChildren() - Getting changes", 3, child)
     	pollEcobeeAPI(thermostatsToPoll)  // This will update the values saved in the state which can then be used to send the updates
 	} else {
-        LOG("pollChildren() - It has been ${timeSinceLastPoll} minutes since last full poll, but nothing has changed. Local update only.", 4, child)
-        generateEventLocalParams() // Update any local parameters and send
+        LOG("pollChildren() - Nothing has changed.", 3, child)
+        // generateEventLocalParams() // Update any local parameters and send
     }
 	
     if (somethingChanged) {
@@ -1185,14 +1189,14 @@ def pollChildren(child = null) {
 
 private def generateEventLocalParams() {
 	// Iterate over all the children
-    LOG("Entered generateEventLocalParams() ", 5)
+    LOG("generateEventLocalParams() - sending cached data", 3, "", "info")
 	def d = getChildDevices()
     d?.each() { oneChild ->
     	LOG("generateEventLocalParams() - Processing poll data for child: ${oneChild} has ${oneChild.capabilities}", 4)
         
     	if( oneChild.hasCapability("Thermostat") ) {
         	// We found a Thermostat, send local params as events
-            LOG("generateEventLocalParams() - We found a Thermostat!")
+            LOG("generateEventLocalParams() - We found a Thermostat!", 4)
             def data = [
             	apiConnected: apiConnected()
             ]
@@ -1201,7 +1205,7 @@ private def generateEventLocalParams() {
             oneChild.generateEvent(data)
         } else {
         	// We must have a remote sensor
-            LOG("generateEventLocalParams() - Updating sensor data: ${oneChild.device.deviceNetworkId}")
+            LOG("generateEventLocalParams() - Updating sensor data: ${oneChild.device.deviceNetworkId}", 4)
 			// No local params to send            
         } 
     }
@@ -1370,6 +1374,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 
 				result = true
                 atomicState.lastRevisions = atomicState.latestRevisions
+                atomicState.runtimeUpdated = false
+                atomicState.thermostatUpdated = false
                 
                 if (apiConnected() != "full") {
 					apiRestored()
@@ -1555,59 +1561,79 @@ def updateSensorData() {
 
 def updateThermostatData() {
 	atomicState.timeOfDay = getTimeOfDay()
-	
+	def runtimeUpdated = atomicState.runtimeUpdated
+    def thermostatUpdated = atomicState.thermostatUpdated
+    
 	// Create the list of thermostats and related data
 	def i = 0
 	
 	atomicState.thermostats = atomicState.thermostatData.thermostatList.inject([:]) { collector, stat ->
 		def dni = [ app.id, stat.identifier ].join('.')
 
-		//LOG("Updating dni $dni, Got weather? ${stat.weather.forecasts[0].weatherSymbol.toString()}", 4)
 		LOG("Updating dni $dni, Got weather? ${atomicState.weather[i].forecasts[0].weatherSymbol.toString()}", 4)
-        //LOG("Climates available: ${stat.program?.climates}", 4)
-		LOG("Climates available: ${atomicState.program[i].climates}", 4)
 
-        // Extract Climates
-        def climateData = atomicState.program[i].climates
-        
-        // TODO: Put a wrapper here based on the thermostat brand
-        def thermSensor = atomicState.remoteSensors[i].find { it.type == "thermostat" }
+    // Handle things that only change when runtime object is updated)
         def occupancy = "not supported"
-        if(!thermSensor) {
-			LOG("This particular thermostat does not have a built in remote sensor", 4)
-			atomicState.hasInternalSensors = false
-        } else {
-        	atomicState.hasInternalSensors = true
-		LOG("updateThermostatData() - thermSensor == ${thermSensor}" )
+		def usingMetric = wantMetric() // cache the value to save the function calls
+        def tempTemperature
+        def tempHeatingSetpoint
+        def tempCoolingSetpoint
+        def tempWeatherTemperature
+		def equipStatus
+        if (runtimeUpdated) {
+			// Occupancy (motion)
+        	// TODO: Put a wrapper here based on the thermostat brand
+        	def thermSensor = atomicState.remoteSensors[i].find { it.type == "thermostat" }
         
-		def occupancyCap = thermSensor?.capability.find { it.type == "occupancy" }
-		LOG("updateThermostatData() - occupancyCap = ${occupancyCap} value = ${occupancyCap.value}")
+        	if(!thermSensor) {
+				LOG("This particular thermostat does not have a built in remote sensor", 4)
+				atomicState.hasInternalSensors = false
+        	} else {
+        		atomicState.hasInternalSensors = true
+				LOG("updateThermostatData() - thermSensor == ${thermSensor}", 4 )
         
-		// Check to see if there is even a value, not all types have a sensor
-		occupancy =  occupancyCap.value ?: "not supported"
+				def occupancyCap = thermSensor?.capability.find { it.type == "occupancy" }
+				LOG("updateThermostatData() - occupancyCap = ${occupancyCap} value = ${occupancyCap.value}", 4, "", "info")
+        
+				// Check to see if there is even a value, not all types have a sensor
+				occupancy =  occupancyCap.value ?: "not supported"
+        	}
+			if (atomicState.hasInternalSensors) { occupancy = (occupancy == "true") ? "active" : "inactive" }
+			
+			// Termperatures
+			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[i].actualTemperature.toDouble() / 10), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
+        	tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredHeat.toDouble() / 10), "F", settings.tempDecimals.toInteger())
+        	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredCool.toDouble() / 10), "F", settings.tempDecimals.toInteger())
+        	tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[i].forecasts[0].temperature.toDouble() / 10)), "F", settings.tempDecimals.toInteger())
+			
+			equipStatus = atomicState.equipmentStatus[i]
+			equipStatus = (equipStatus.size() == 0) ? 'idle' : equipStatus
         }
-        // LOG("Program data: ${stat.program}  Current climate (ref): ${stat.program?.currentClimateRef}", 4)
         
-        // Determine if an Event is running, find the first running event
-        def runningEvent = null
-        
-        if ( atomicState.events[i].size() > 0 ) {         
+	// handle things that only change with thermostat object is updated
+		
+ 
+	// handle things that depend on both thermostat and runtime objects
+		// Determine if an Event is running, find the first running event (only changes when thermostat object is updated)
+    	def runningEvent = null
+        def currentClimateName = ""
+		def currentClimateId = ""
+        def currentFanMode = ""
+		
+		// what program is supposed to be running now?
+		def scheduledClimateId = atomicState.program[i].currentClimateRef
+		def scheduledClimateName = ""
+		if (scheduledClimateId) { 
+            	ClimateName = (atomicState.program[i].climates.find { currentClimateId }).name
+		}
+		
+		// check which program is actually running now
+		if ( atomicState.events[i].size() > 0 ) {         
         	runningEvent = atomicState.events[i].find { 
             	LOG("Checking event: ${it}", 5) 
                 it.running == true
             }        	
-        }        
-        
-        def usingMetric = wantMetric() // cache the value to save the function calls
-        def tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[i].actualTemperature.toDouble() / 10), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
-        def tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredHeat.toDouble() / 10), "F", settings.tempDecimals.toInteger())
-        def tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredCool.toDouble() / 10), "F", settings.tempDecimals.toInteger())
-        def tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[i].forecasts[0].temperature.toDouble() / 10)), "F", settings.tempDecimals.toInteger())
-                
-        def currentClimateName = ""
-		def currentClimateId = ""
-        def currentFanMode = ""
-                 
+		}             
         if (runningEvent) {         	
             LOG("Found a running Event: ${runningEvent}", 4) 
             def tempClimateRef = runningEvent.holdClimateRef ?: ""
@@ -1625,74 +1651,104 @@ def updateThermostatData() {
                	currentClimateName = runningEvent.type
             }
             currentClimateId = runningEvent.holdClimateRef
-		} else if (atomicState.program[i].currentClimateRef) {
-        	currentClimateName = (atomicState.program[i].climates.find { it.climateRef == atomicState.program[i].currentClimateRef }).name
-        	currentClimateId =atomicState.program[i].currentClimateRef            
-        } else {
-        	LOG("updateThermostatData() - No climateRef or running Event was found", 1, null, "error")
-            currentClimateName = ""
-        	currentClimateId = ""        	
-        }
-        
-        LOG("currentClimateName set = ${currentClimateName}  currentClimateId set = ${currentClimateId}")
-        
-        
+		} else {
+			if (scheduledClimateId) {
+        		currentClimateId = scheduledClimateId
+        		currentClimateName = scheduledClimateName
+			} else {
+        		LOG("updateThermostatData() - No climateRef or running Event was found", 1, null, "error")
+            	currentClimateName = ""
+        		currentClimateId = ""        	
+        	}
+		}
+        LOG("updateThermostatData() - currentClimateName set = ${currentClimateName}  currentClimateId set = ${currentClimateId}", 3, null, "info")
+		
         if (runningEvent) {
         	currentFanMode = atomicState.circulateFanModeOn ? "circulate" : atomicState.offFanModeOn ? "off" : runningEvent.fan
         } else {
         	currentFanMode = atomicState.runtime[i].desiredFanMode
 		}
-        
-		if (atomicState.hasInternalSensors) { occupancy = (occupancy == "true") ? "active" : "inactive" }
-	
-		def equipStatus = atomicState.equipmentStatus[i]
-		equipStatus = (equipStatus.size() == 0) ? 'idle' : equipStatus
 		
-		def statMode = atomicState.settings[i].hvacMode
 		def humiditySetpoint = 0
+        def humid = atomicState.runtime[i].desiredHumidity
+        def dehum = atomicState.runtime[i].desiredDehumidity
+        def hasHum = atomicState.settings[i].hasHumidifier
+        def hasDeh = atomicState.settings[i].hasDehumidifier || atomicState.settings[i].dehumidifyWithAC // we can hide the details from the device handler
+        def statMode = atomicState.settings[i].hvacMode
+		
 		switch (statMode) {
 			case 'heat':
-				humiditySetpoint = atomicState.runtime[i].desiredHumidity
+				if (hasHum) humiditySetpoint = humid
 				break;
 			case 'cool':
-				humiditySetpoint = atomicState.runtime[i].desiredDehumidity
+            	if (hasDeh) humiditySetpoint = dehum
 				break;
 			case 'auto':
-				humiditySetpoint = atomicState.runtime[i].desiredHumidity.toString() + '-' + atomicState.runtime[i].desiredDehumidity.toString()
+				if ( hasHum && hasDeh) { humiditySetpoint = humid.toString() + '-' + dehumid.toString() }
+                else if (hasHum) { humiditySetpoint = humid }
+                else if (hasDeh) { humiditySetpoint = dehum }
 				break;
 		}
 		
-		def data = [
-        	decimalPrecision: tempDecimals,
+        // we always send these
+        def data = [
+           	decimalPrecision: tempDecimals,
 			temperatureScale: getTemperatureScale(),
 			lastPoll: atomicState.lastPollDate,
 			apiConnected: apiConnected(),
-			coolMode: (atomicState.settings[i].coolStages > 0),
-			heatMode: (atomicState.settings[i].heatStages > 0),
-			autoMode: atomicState.settings[i].autoHeatCoolFeatureEnabled,
-			currentProgramName: currentClimateName,
-			currentProgramId: currentClimateId,
-			auxHeatMode: (atomicState.settings[i].hasHeatPump) && (atomicState.settings[i].hasForcedAir || atomicState.settings[i].hasElectric || atomicState.settings[i].hasBoiler),
-			temperature:  String.format("%.${settings.tempDecimals}f", tempTemperature),  // usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
-			heatingSetpoint: String.format("%.${settings.tempDecimals}f", tempHeatingSetpoint), //usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
-			coolingSetpoint: String.format("%.${settings.tempDecimals}f", tempCoolingSetpoint), //usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
-			thermostatMode: statMode,
-			thermostatFanMode: currentFanMode,
-			humidity: atomicState.runtime[i].actualHumidity,
-			humiditySetpoint: humiditySetpoint,
-			motion: occupancy,
-			equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
-			thermostatOperatingState: getThermostatOperatingState(equipStatus),
-			timeOfDay: atomicState.timeOfDay,
-			weatherSymbol: atomicState.weather[i].forecasts[0].weatherSymbol.toString(),
-			weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
-		] 
+        	timeOfDay: atomicState.timeOfDay
+        ]
+            
+        if (atomicState.thermostatUpdated) {	// new settings, programs or events
+			data += [
+				coolMode: (atomicState.settings[i].coolStages > 0),
+            	coolStages: atomicState.settings[i].coolStages,
+				heatMode: (atomicState.settings[i].heatStages > 0),
+            	heatStages: atomicState.settings[i].heatStages,
+				autoMode: atomicState.settings[i].autoHeatCoolFeatureEnabled,
+                thermostatMode: statMode,
+            	heatRangeHigh: atomicState.settings[i].heatRangeHigh,
+            	heatRangeLow: atomicState.settings[i].heatRangeLow,
+            	coolRangeHigh: atomicState.settings[i].coolRangeHigh,
+            	coolRangeLow: atomicState.settings[i].coolRangeLow,
+				currentProgramName: currentClimateName,
+				currentProgramId: currentClimateId,
+				currentProgram: currentClimateName,
+				scheduledProgramName: currentClimateName,
+				scheduledProgramId: scheduledClimateId,
+				scheduledProgram: scheduledClimateName,
+            	hasHeatPump: atomicState.settings[i].hasHeatPump,
+            	hasForcedAir: atomicState.settings[i].hasForcedAir,
+            	hasElectric: atomicState.settings[i].hasElectric,
+            	hasBoiler: atomicState.settings[i].hasBoiler,
+				auxHeatMode: (atomicState.settings[i].hasHeatPump) && (atomicState.settings[i].hasForcedAir || atomicState.settings[i].hasElectric || atomicState.settings[i].hasBoiler),
+            	hasHumidifier: hasHum,
+				hasDehumidifier: hasDeh
+			]
+		}
 		
-		// data["temperature"] = data["temperature"] ? ( wantMetric() ? data["temperature"].toDouble() : data["temperature"].toDouble().round(1) /*.toInteger()*/ ) : data["temperature"]
-		// data["heatingSetpoint"] = data["heatingSetpoint"] ? ( wantMetric() ? data["heatingSetpoint"].toDouble() : data["heatingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["heatingSetpoint"]
-		// data["coolingSetpoint"] = data["coolingSetpoint"] ? ( wantMetric() ? data["coolingSetpoint"].toDouble() : data["coolingSetpoint"].toDouble().round(1) /*.toInteger()*/ ) : data["coolingSetpoint"]
-		// data["weatherTemperature"] = data["weatherTemperature"] ? ( wantMetric() ? data["weatherTemperature"].toDouble() : data["weatherTemperature"].toDouble().round(1) /*.toInteger()*/ ) : data["weatherTemperature"]
-        
+		if (atomicState.runtimeUpdated) {
+			data += [            
+				temperature:  String.format("%.${settings.tempDecimals}f", tempTemperature),  // usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
+				heatingSetpoint: String.format("%.${settings.tempDecimals}f", tempHeatingSetpoint), //usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
+				coolingSetpoint: String.format("%.${settings.tempDecimals}f", tempCoolingSetpoint), //usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
+				thermostatFanMode: currentFanMode,
+				humidity: atomicState.runtime[i].actualHumidity,
+				humiditySetpoint: humiditySetpoint,
+				motion: occupancy,
+				equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
+				thermostatOperatingState: getThermostatOperatingState(equipStatus),
+				weatherSymbol: atomicState.weather[i].forecasts[0].weatherSymbol.toString(),
+				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
+			]
+		}
+	
+		//* I DON'T THINK THIS IS USED ANYWHERE!!!
+	    // Extract Climates
+/*		
+		LOG("Climates available: ${atomicState.program[i].climates}", 4)
+        def climateData = atomicState.program[i].climates
+    
         climateData.each { climate ->
         	LOG("Climate found: ${climate}", 5)
             
@@ -1703,9 +1759,10 @@ def updateThermostatData() {
             	LOG("Climate was standard type: ${climate}", 5)
             }            
 		}
+*/
 		LOG("Event Data (${i}) = ${data}", 4)
 
-		collector[dni] = [data:data,climateData:climateData]
+		collector[dni] = [data:data /*,climateData:climateData */]
 		i++
 		return collector
 	}			
