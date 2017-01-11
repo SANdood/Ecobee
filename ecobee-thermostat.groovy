@@ -110,6 +110,8 @@ metadata {
 		attribute "heatRangeLow", "number"
 		attribute "coolRangeHigh", "number"
 		attribute "coolRangeLow", "number"
+		attribute "heatRange", "string"
+		attribute "coolRange", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -296,13 +298,13 @@ metadata {
 		standardTile("downButtonControl", "device.thermostatSetpoint", height: 1, width: 2, inactiveLabel: false, decoration: "flat") {
 			state "setpoint", action:"lowerSetpoint", icon:"st.thermostat.thermostat-down"
 		}
-		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range:"(15..85)") {
+		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00", unit: 'C'
 		}
 		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 2, inactiveLabel: false, decoration: "flat") {
 			state "heat", label:'${currentValue}°\nHeat', unit:"dF", backgroundColor:"#d04e00"
 		}
-		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range:"(15..85)") {
+		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor: "#1e9cbb", unit: 'C'
 		}
 		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 2, height: 1, inactiveLabel: false, decoration: "flat") {
@@ -520,6 +522,8 @@ def generateEvent(Map results) {
     LOG("Debug level of parent: ${parent.settings?.debugLevel}", 4, null, "debug")
 	def linkText = getLinkText(device)
 
+	def updateTempRanges = false
+	
 	if(results) {
 		String tempDisplay = ""
 		results.each { name, value ->
@@ -563,9 +567,11 @@ def generateEvent(Map results) {
             	// Check to see if it is night time, if so change to a night symbol
                 def symbolNum = value.toInteger() + 100
                 isChange = isStateChange(device, name, symbolNum.toString())
-                // isDisplayed = isChange
 				if (isChange) event = eventFront + [value: symbolNum.toString(), isStateChange: true, displayed: true]            
-            } else {
+            } else if (name=='heatRangeLow' || name=='heatRangeHigh' || nam =='coolRangeLow' || name=='coolRangeHigh' || name=='heatRange' || name=='coolRange' ) {
+				isChange = isStateChange(device, name, value.toString())
+				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: false]
+			} else {
 				isChange = isStateChange(device, name, value.toString())
 				// isDisplayed = isChange
 				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
@@ -707,22 +713,25 @@ void setHeatingSetpoint(Double setpoint) {
 	def coolingSetpoint = device.currentValue("coolingSetpoint").toDouble()
 	def deviceId = getDeviceId()
 
-
 	LOG("setHeatingSetpoint() before compare: heatingSetpoint == ${heatingSetpoint}   coolingSetpoint == ${coolingSetpoint}", 4)
 	//enforce limits of heatingSetpoint vs coolingSetpoint
+	def low = device.currentValue("heatRangeLow")
+	def high = device.currentValue("heatRangeHigh")
+	
+	if (heatingSetpoint < low ) { heatingSetpoint = low }
+	if (heatingSetpoint > high) { heatingSetpoint = high}
 	if (heatingSetpoint > coolingSetpoint) {
 		coolingSetpoint = heatingSetpoint
 	}
 
-	LOG("Sending setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}", 4)
-
+	LOG("Sending setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}")
 
 	def sendHoldType = whatHoldType()
 
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType)) {
 		sendEvent("name":"heatingSetpoint", "value": wantMetric() ? heatingSetpoint : heatingSetpoint.round(0).toInteger() )
 		sendEvent("name":"coolingSetpoint", "value": wantMetric() ? coolingSetpoint : coolingSetpoint.round(0).toInteger() )
-		LOG("Done setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}", 4)
+		LOG("Done setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}")
 		generateSetpointEvent()
 		generateStatusEvent()
 	} else {
@@ -748,6 +757,11 @@ void setCoolingSetpoint(Double setpoint) {
 	LOG("setCoolingSetpoint() before compare: heatingSetpoint == ${heatingSetpoint}   coolingSetpoint == ${coolingSetpoint}")
 
 	//enforce limits of heatingSetpoint vs coolingSetpoint
+	def low = device.currentValue("coolRangeLow")
+	def high = device.currentValue("coolRangeHigh")
+	
+	if (coolingSetpoint < low ) { coolingSetpoint = low }
+	if (coolingSetpoint > high) { coolingSetpoint = high}
 	if (heatingSetpoint > coolingSetpoint) {
 		heatingSetpoint = coolingSetpoint
 	}
@@ -922,8 +936,8 @@ def setThermostatProgram(program, holdType=null) {
         runIn(15, "poll")        
 	} else {
     	LOG("Error setting new comfort setting ${program}.", 2, null, "warn")
-		def currentProgram = device.currentState("currentProgramId")?.value
-		generateProgramEvent(currentProgram, program) // reset the tile back
+		def priorProgram = device.currentState("currentProgramId")?.value
+		generateProgramEvent(priorProgram, program) // reset the tile back
 	}
  
  	LOG("After calling parent.setProgram()", 5)
@@ -1135,6 +1149,10 @@ void alterSetpoint(temp) {
 	def heatingSetpoint = device.currentValue("heatingSetpoint")
 	def coolingSetpoint = device.currentValue("coolingSetpoint")
     def currentTemp = device.currentValue("temperature")
+    def heatHigh = device.currentValue('heatHigh')
+    def heatLow = device.currentValue('heatLow')
+    def coolHigh = device.currentValue('coolHigh')
+    def coolLow = device.currentValue('coolLow')
     def saveThermostatSetpoint = device.currentValue("thermostatSetpoint")
 	def deviceId = getDeviceId()
 
@@ -1145,6 +1163,8 @@ void alterSetpoint(temp) {
 
 	//step1: check thermostatMode
 	if (mode == "heat"){
+    	if (temp.value > heatHigh) targetHeatingSetpoint = heatHigh
+        if (temp.value < heatLow) targetHeatingSetpoint = heatLow
 		if (temp.value > coolingSetpoint){
 			targetHeatingSetpoint = temp.value
 			targetCoolingSetpoint = temp.value
@@ -1154,6 +1174,8 @@ void alterSetpoint(temp) {
 		}
 	} else if (mode == "cool") {
 		//enforce limits before sending request to cloud
+    	if (temp.value > coolHigh) targetHeatingSetpoint = coolHigh
+        if (temp.value < coolLow) targetHeatingSetpoint = coolLow
 		if (temp.value < heatingSetpoint){
 			targetHeatingSetpoint = temp.value
 			targetCoolingSetpoint = temp.value
@@ -1165,11 +1187,15 @@ void alterSetpoint(temp) {
     	// Make changes based on our Smart Auto mode
         if (temp.value > currentTemp) {
         	// Change the heat settings to the new setpoint
+            if (temp.value > heatHigh) targetHeatingSetpoint = heatHigh
+        	if (temp.value < heatLow) targetHeatingSetpoint = heatLow
             LOG("alterSetpoint() - Smart Auto setting setpoint: ${temp.value}. Updating heat target")
             targetHeatingSetpoint = temp.value
             targetCoolingSetpoint = (temp.value > coolingSetpoint) ? temp.value : coolingSetpoint
 		} else {
         	// Change the cool settings to the new setpoint
+            if (temp.value > coolHigh) targetHeatingSetpoint = coolHigh
+        	if (temp.value < coolLow) targetHeatingSetpoint = coolLow
 			LOG("alterSetpoint() - Smart Auto setting setpoint: ${temp.value}. Updating cool target")
             targetCoolingSetpoint = temp.value
 
@@ -1266,7 +1292,8 @@ def noOp() {
 }
 
 def getSliderRange() {
-	return wantMetric ? "(15..30)" : "(50..90)"
+	// should be returning the attributes heatRange and coolRange (once they are populated), but you can't get access to those while the forms are created (even after running for days).
+	return wantMetric ? "(5..35)" : "(45..95)"
 }
 
 // Built in functions from SmartThings
