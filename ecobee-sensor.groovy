@@ -122,7 +122,7 @@ def generateEvent(Map results) {
                 
 				isChange = isStateChange(device, name, sendValue.toString())
 				// isDisplayed = isChange
-				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+				if (isChange) event = [name: name, linkText: linkText, desciptionText: "Temperature is ${tempDisplay}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 				
 			} else if (name=="motion") {        
             	def sendValue = value
@@ -135,7 +135,7 @@ def generateEvent(Map results) {
                 
 				isChange = isStateChange(device, name, sendValue.toString())
 				// isDisplayed = isChange
-				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue.toString(), isStateChange: true, displayed: true]
+				if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue.toString(), isStateChange: true, displayed: true]
 			} else {
 				isChange = isStateChange(device, name, value.toString())
 				// isDisplayed = isChange
