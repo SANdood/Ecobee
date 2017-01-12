@@ -62,16 +62,17 @@ metadata {
         
         command "setThermostatProgram"
         command "home"
-        command "sleep"
+
+// Unfortunately we cannot overload the internal definition of 'sleep()', and calling this will silently fail (actually, it does a
+// "sleep(0)")
+//		command "sleep"
         command "asleep"
-        command "night"
+        command "night"				// this is probably the appropriate SmartThings device command to call, matches ST mode
         command "away"
         
-        command "fanOff"  // Missing from the Thermostat standard capability set
-        command "noOp" // Workaround for formatting issues 
+        command "fanOff"  			// Missing from the Thermostat standard capability set
+        command "noOp" 				// Workaround for formatting issues 
         command "setStateVariable"
-        
-        
 
 		// Capability "Thermostat"
         attribute "temperatureScale", "string"
@@ -100,6 +101,8 @@ metadata {
         attribute "coolMode", "string"
 		attribute "heatMode", "string"
         attribute "autoMode", "string"
+		attribute "heatStages", "number"
+		attribute "coolStages", "number"
 		attribute "hasHeatPump", "string"
         attribute "hasForcedAir", "string"
         attribute "hasElectric", "string"
@@ -112,6 +115,7 @@ metadata {
 		attribute "coolRangeLow", "number"
 		attribute "heatRange", "string"
 		attribute "coolRange", "string"
+		attribute "thermostatHold", "string"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -351,7 +355,8 @@ metadata {
 
         standardTile("setSleep", "device.setSleep", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			// state "sleep", action:"sleep", nextState: "updating", label:'Set Sleep', icon:"st.Bedroom.bedroom2"
-            state "sleep", action:"sleep", nextState: "updating", label:'Sleep', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
+			// can't call "sleep()" because of conflict with internal definition (it silently fails)
+            state "sleep", action:"night", nextState: "updating", label:'Sleep', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
 			state "updating", label:"Working...", icon: "st.samsung.da.oven_ic_send"
 		}
 
@@ -496,14 +501,12 @@ metadata {
             // input "detailedTracing", "bool", title: "Enable Detailed Tracing", description: true, required: false
        }
 	}
-
 }
 
 // parse events into attributes
 def parse(String description) {
 	LOG( "parse() --> Parsing '${description}'" )
 	// Not needed for cloud connected devices
-
 }
 
 def refresh() {
@@ -513,9 +516,8 @@ def refresh() {
 
 void poll() {
 	LOG("Executing 'poll' using parent SmartApp")
-    parent.pollChildren(this)
+    parent.pollChildren() //parent will poll ALL the thermostats 
 }
-
 
 def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data $results", 4)
@@ -556,8 +558,8 @@ def generateEvent(Map results) {
 			} else if (name=="thermostatOperatingState") {
             	generateOperatingStateEvent(value.toString())
                 return
-			} else if (name=="equipmentStatus") {
-				generateEquipmentStatusEvent(value)
+			} else if (name=="equipmentOperatingState") {
+				generateEquipmentStateEvent(value)
             } else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
@@ -622,6 +624,9 @@ private getThermostatDescriptionText(name, value, linkText) {
         case 'humiditySetpoint':
         	return "Humidity setpoint is ${value}%"
             break;
+		case 'thermostatHold':
+			return (value == "") ? 'Hold released' : (value == 'hold') ? 'Hold for program or temp' : "Hold for ${value}"
+			break;
 		default:
 			return "${name} is ${value}"
             break;
@@ -652,7 +657,6 @@ def setTemperature(setpoint) {
     	deltaTemp = ( (setpoint - currentTemp) < 0) ? -1 : 1
     }
     
-
     LOG("deltaTemp = ${deltaTemp}")
 
     if (mode == "auto") {
@@ -729,8 +733,8 @@ void setHeatingSetpoint(Double setpoint) {
 	def sendHoldType = whatHoldType()
 
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType)) {
-		sendEvent("name":"heatingSetpoint", "value": wantMetric() ? heatingSetpoint : heatingSetpoint.round(0).toInteger() )
-		sendEvent("name":"coolingSetpoint", "value": wantMetric() ? coolingSetpoint : coolingSetpoint.round(0).toInteger() )
+		sendEvent("name":"heatingSetpoint", "value": wantMetric() ? heatingSetpoint : heatingSetpoint.toDouble().round(0).toInteger() )
+		sendEvent("name":"coolingSetpoint", "value": wantMetric() ? coolingSetpoint : coolingSetpoint.toDouble().round(0).toInteger() )
 		LOG("Done setHeatingSetpoint> coolingSetpoint: ${coolingSetpoint}, heatingSetpoint: ${heatingSetpoint}")
 		generateSetpointEvent()
 		generateStatusEvent()
@@ -772,8 +776,8 @@ void setCoolingSetpoint(Double setpoint) {
 
     // Convert temp to F from C if needed
 	if (parent.setHold(this, heatingSetpoint,  coolingSetpoint, deviceId, sendHoldType)) {
-		sendEvent("name":"heatingSetpoint", "value": wantMetric() ? heatingSetpoint : heatingSetpoint.round(0).toInteger() )
-		sendEvent("name":"coolingSetpoint", "value": wantMetric() ? coolingSetpoint : coolingSetpoint.round(0).toInteger() )
+		sendEvent("name":"heatingSetpoint", "value": wantMetric() ? heatingSetpoint : heatingSetpoint.toDouble().round(0).toInteger() )
+		sendEvent("name":"coolingSetpoint", "value": wantMetric() ? coolingSetpoint : coolingSetpoint.toDouble().round(0).toInteger() )
 		LOG("Done setCoolingSetpoint>> coolingSetpoint = ${coolingSetpoint}, heatingSetpoint = ${heatingSetpoint}", 4)
 		generateSetpointEvent()
 		generateStatusEvent()
@@ -802,24 +806,10 @@ void resumeProgram() {
 }
 
 /*
-def modes() {
-	if (state.modes) {
-		LOG("Modes = ${state.modes}", 5)
-		return state.modes
-	}
-	else {
-		state.modes = parent.availableModes(this)
-		LOG("Modes = ${state.modes}", 5)
-		return state.modes
-	}
-}
-
 def fanModes() {
 	["off", "on", "auto", "circulate"]
 }
 */
-
-
 
 def generateQuickEvent(name, value) {
 	generateQuickEvent(name, value, 0)
@@ -839,29 +829,10 @@ def generateOperatingStateEvent(operatingState) {
 	sendEvent(name: "thermostatOperatingState", value: operatingState, descriptionText: "Thermostat is ${operatingState}", displayed: true)
 }
 
-def generateEquipmentStatusEvent(equipmentStatus) {
-	String equipStat = ""
-	if ((equipmentStatus.size() == 0) || (equipmentStatus == "idle")) { equipStat = "idle" }
-	else if (equipmentStatus == "fan") { equipStat = "fan only" }
-	else if (equipmentStatus.contains("eat")) {
-		if (equipmentStatus.contains("eat1")) { 
-        	if (device.currentValue("auxHeat") == "true") { equipStatus = "emergency" }
-            else { 
-				if (device.currentValue("heatStages") == 1) { equipStat = "heating" } else { equipStat = "heat 1" }
-			}
-		}
-		else if (equipmentStatus.contains("eat2")) { equipStat = "heat 2" }
-		else if (equipmentStatus.contains("eat3")) { equipStat = "heat 3" }
-		else if (equipmentStatus.contains("ump2")) { equipStat = "heat 2" }
-		else if (equipmentStatus.contains("ump3")) { equipStat = "heat 3" }
-		else if (equipmentStatus.contains("Pump")) { equipStat = "heat pump" }
-	} else if (equipmentStatus.contains("ool")) {
-		if (equipmentStatus.contains("ool1")) { 
-			if (device.currentValue("coolStages") == 1) { equipStat = "cooling" } else { equipStat = "cool 1" }
-		}
-		else if (equipmentStatus.contains("ool2")) { equipStat = "cool 2" }		
-	}
-	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: true)		 
+def generateEquipmentStateEvent(equipStat) {
+	LOG("generateEquipmentStateEvent() with state: ${equipStat}", 4)
+	// we hide this one from the device notifications because it's redundant with equipmentStatus (which has even more info)
+	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: false)		 
 }
 
 def setThermostatMode(String value) {
@@ -877,13 +848,12 @@ def setThermostatMode(String value) {
 		// generateQuickEvent("thermostatMode", value, 15)
 	} else {
 		LOG("Error setting new mode to ${value}.", 1, null, "error")
-		def currentMode = device.currentState("thermostatMode")?.value
+		def currentMode = device.currentValue("thermostatMode")
 		generateQuickEvent("thermostatMode", currentMode) // reset the tile back
 	}
 	generateSetpointEvent()
 	generateStatusEvent()
 }
-
 
 def off() {
 	LOG("off()", 5)
@@ -919,7 +889,6 @@ def auto() {
     setThermostatMode("auto")    
 }
 
-
 // Handle Comfort Settings
 def setThermostatProgram(program, holdType=null) {
 	// Change the Comfort Setting to Home
@@ -930,6 +899,16 @@ def setThermostatProgram(program, holdType=null) {
 	
     def sendHoldType = holdType ?: whatHoldType()
     
+	
+	// if the requested program is the same as the one that is supposed to be running, then just resumeProgram
+	// but only if this is NOT a permanent hold request
+	if (sendHoldType == 'nextTransition') {
+		if (device.currentValue("scheduledProgram") == program) {
+			LOG("setThermostatProgram() - resuming scheduled program ${program}", 4)
+			resumeProgram()
+			return
+		}
+	}
   
     if ( parent.setProgram(this, program, deviceId, sendHoldType) ) {
 		generateProgramEvent(program)
@@ -946,8 +925,6 @@ def setThermostatProgram(program, holdType=null) {
 	generateStatusEvent()    
 }
 
-
-
 def home() {
 	// Change the Comfort Setting to Home
     LOG("home()", 5)
@@ -960,12 +937,13 @@ def away() {
     setThermostatProgram("Away")
 }
 
-def sleep() {
+// Unfortunately, we can't overload the internal Java/Groovy/system definition of 'sleep()'
+/* def sleep() {
 	// Change the Comfort Setting to Sleep    
     LOG("sleep()", 5)
     setThermostatProgram("Sleep")
 }
-
+*/
 def asleep() {
 	// Change the Comfort Setting to Sleep    
     LOG("asleep()", 5)
@@ -994,7 +972,6 @@ def generateProgramEvent(program, failedProgram=null) {
     }
     sendEvent("name":"${tileName}", "value":"${program}", descriptionText: "${tileName} is done", displayed: false, isStateChange: true)
 }
-
 
 def setThermostatFanMode(value, holdType=null) {
 	LOG("setThermostatFanMode(${value})", 4)
@@ -1028,7 +1005,6 @@ def setThermostatFanMode(value, holdType=null) {
 def fanOn() {
 	LOG("fanOn()", 5)
     setThermostatFanMode("on")
-
 }
 
 def fanAuto() {
@@ -1073,7 +1049,6 @@ def generateSetpointEvent() {
 	} else if (mode == "emergencyHeat") {
 		sendEvent("name":"thermostatSetpoint", "value":heatingSetpoint.toString())
 	}
-
 }
 
 void raiseSetpoint() {
@@ -1140,7 +1115,6 @@ void lowerSetpoint() {
 		// Wait 4 seconds before sending in case we hit the buttons again
 		runIn(4, "alterSetpoint", [data: [value:targetvalue], overwrite: true]) //when user click button this runIn will be overwrite
 	}
-
 }
 
 //called by raiseSetpoint() and lowerSetpoint()
@@ -1293,7 +1267,8 @@ def noOp() {
 
 def getSliderRange() {
 	// should be returning the attributes heatRange and coolRange (once they are populated), but you can't get access to those while the forms are created (even after running for days).
-	return wantMetric ? "(5..35)" : "(45..95)"
+	// return "'\${wantMetric()}'" ? "(5..35)" : "(45..95)"
+    return "(5..90)" 
 }
 
 // Built in functions from SmartThings
@@ -1356,9 +1331,7 @@ private def LOG(message, level=3, child=null, logType="debug", event=false, disp
 	}    
 }
 
-
 private def debugEvent(message, displayEvent = false) {
-
 	def results = [
 		name: "appdebug",
 		descriptionText: message,
@@ -1367,8 +1340,6 @@ private def debugEvent(message, displayEvent = false) {
 	if ( debugLevel(4) ) { log.debug "Generating AppDebug Event: ${results}" }
 	sendEvent (results)
 }
-
-
 
 def getTempColors() {
 	def colorMap
