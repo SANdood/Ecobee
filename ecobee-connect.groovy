@@ -1747,7 +1747,7 @@ def updateThermostatData() {
 		def lastEquipStatusList = atomicState.lastEquipStatus
         def lastEquipOpStatList = atomicState.lastEquipOpStat
 		if (lastEquipStatusList.size() > i) { lastEquipStatus = lastEquipStatusList[i] }
-		if ( (lastEquipStatus != equipStatus) || (i > lastEquipOpList.size()) ) { 		// avoid the heavy lift, if we can
+		if ( (lastEquipStatus != equipStatus) || (i > lastEquipOpStatList.size()) ) { 		// avoid the heavy lift, if we can
 			if (equipStatus == 'fan') { equipOpStat = 'fan only' }
 			else if (equipStatus.contains('eat')) {					// heating
 				if (equipStatus.contains('eat1')) { equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages == 1) ? 'heating' : 'heat 1' }
