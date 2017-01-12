@@ -1381,8 +1381,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 					apiRestored()
                     generateEventLocalParams() // Update the connection status
                 }
-                
-				LOG("pollEcobeeAPI() httpGet: updated ${atomicState.thermostats?.size()} stats: ${atomicState.thermostats}", 1, null, "info")
+                def tNames = resp.data.thermostatList?.name.toString()
+				LOG("pollEcobeeAPI() httpGet: updated ${atomicState.thermostats?.size()} stats: ${tNames} ${atomicState.thermostats}", 1, null, "info")
 			} else {
 				LOG("pollEcobeeAPI() - polling children & got http status ${resp.status}", 1, null, "error")
 
@@ -1563,6 +1563,7 @@ def updateThermostatData() {
 	atomicState.timeOfDay = getTimeOfDay()
 	def runtimeUpdated = atomicState.runtimeUpdated
     def thermostatUpdated = atomicState.thermostatUpdated
+	def usingMetric = wantMetric() // cache the value to save the function calls
     
 	// Create the list of thermostats and related data
 	def i = 0
@@ -1574,7 +1575,6 @@ def updateThermostatData() {
 
     // Handle things that only change when runtime object is updated)
         def occupancy = "not supported"
-		def usingMetric = wantMetric() // cache the value to save the function calls
         def tempTemperature
         def tempHeatingSetpoint
         def tempCoolingSetpoint
@@ -1611,7 +1611,18 @@ def updateThermostatData() {
         }
         
 	// handle things that only change with thermostat object is updated
+		def heatHigh = (atomicState.settings[i].heatRangeHigh.toDouble() / 10.0).round(0).toInteger()
+		def heatLow = (atomicState.settings[i].heatRangeLow.toDouble() / 10.0).round(0).toInteger()
+		def coolHigh = (atomicState.settings[i].coolRangeHigh.toDouble() / 10.0).round(0).toInteger()
+		def coolLow = (atomicState.settings[i].coolRangeLow.toDouble() / 10.0).round(0).toInteger()
+		// UI works better with the same ranges for both heat and cool...but the device handler isn't using these values for the UI
+		def heatRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(5..25)" : "(40..80)"
+		def coolRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(18..35)" : "(65..95)"
 		
+		if (thermostatUpdated) {
+			if (heatLow && heatHigh) heatRange = "(${heatLow}..${heatHigh})"
+			if (coolLow && coolHigh) coolRange = "(${coolLow}..${heatHigh})"
+		}
  
 	// handle things that depend on both thermostat and runtime objects
 		// Determine if an Event is running, find the first running event (only changes when thermostat object is updated)
@@ -1627,6 +1638,7 @@ def updateThermostatData() {
 		if (scheduledClimateId) { 
             	scheduledClimateName = (atomicState.program[i].climates.find { scheduledClimateId }).name
 		}
+		log.debug( "scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}")
 		
 		// check which program is actually running now
 		if ( atomicState.events[i].size() > 0 ) {         
@@ -1652,11 +1664,13 @@ def updateThermostatData() {
             } else {                
                	currentClimateName = runningEvent.type
             }
-            currentClimateId = runningEvent.holdClimateRef
+            // currentClimateId = runningEvent.holdClimateRef
+			currentClimateId = tempClimateRef
 		} else {
 			if (scheduledClimateId) {
         		currentClimateId = scheduledClimateId
         		currentClimateName = scheduledClimateName
+				currentClimate = scheduledClimateName
 			} else {
         		LOG("updateThermostatData() - No climateRef or running Event was found", 1, null, "error")
             	currentClimateName = ""
@@ -1674,16 +1688,16 @@ def updateThermostatData() {
 		def humiditySetpoint = 0
         def humid = atomicState.runtime[i].desiredHumidity
         def dehum = atomicState.runtime[i].desiredDehumidity
-        def hasHum = atomicState.settings[i].hasHumidifier
-        def hasDeh = atomicState.settings[i].hasDehumidifier || atomicState.settings[i].dehumidifyWithAC // we can hide the details from the device handler
+        def hasHumidifier = atomicState.settings[i].hasHumidifier
+        def hasDehumidifier = atomicState.settings[i].hasDehumidifier || atomicState.settings[i].dehumidifyWithAC // we can hide the details from the device handler
         def statMode = atomicState.settings[i].hvacMode
 		
 		switch (statMode) {
 			case 'heat':
-				if (hasHum) humiditySetpoint = humid
+				if (hasHumidifier) humiditySetpoint = humid
 				break;
 			case 'cool':
-            	if (hasDeh) humiditySetpoint = dehum
+            	if (hasDehumidifier) humiditySetpoint = dehum
 				break;
 			case 'auto':
 				if ( hasHum && hasDeh) { humiditySetpoint = humid.toString() + '-' + dehumid.toString() }
@@ -1709,10 +1723,12 @@ def updateThermostatData() {
             	heatStages: atomicState.settings[i].heatStages,
 				autoMode: atomicState.settings[i].autoHeatCoolFeatureEnabled,
                 thermostatMode: statMode,
-            	heatRangeHigh: atomicState.settings[i].heatRangeHigh,
-            	heatRangeLow: atomicState.settings[i].heatRangeLow,
-            	coolRangeHigh: atomicState.settings[i].coolRangeHigh,
-            	coolRangeLow: atomicState.settings[i].coolRangeLow,
+            	heatRangeHigh: heatHigh,
+            	heatRangeLow: heatLow,
+            	coolRangeHigh: coolHigh,
+            	coolRangeLow: coolLow,
+				heatRange: heatRange,
+				coolRange: coolRange,
 				currentProgramName: currentClimateName,
 				currentProgramId: currentClimateId,
 				currentProgram: currentClimate,
@@ -1724,8 +1740,8 @@ def updateThermostatData() {
             	hasElectric: atomicState.settings[i].hasElectric,
             	hasBoiler: atomicState.settings[i].hasBoiler,
 				auxHeatMode: (atomicState.settings[i].hasHeatPump) && (atomicState.settings[i].hasForcedAir || atomicState.settings[i].hasElectric || atomicState.settings[i].hasBoiler),
-            	hasHumidifier: hasHum,
-				hasDehumidifier: hasDeh
+            	hasHumidifier: hasHumidifier,
+				hasDehumidifier: hasDehumidifier
 			]
 		}
 		
