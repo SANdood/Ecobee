@@ -14,15 +14,15 @@
  *  for the specific language governing permissions and limitations under the License.
  *
  */
-def getVersionNum() { return "0.1.4" }
+def getVersionNum() { return "0.1.5" }
 private def getVersionLabel() { return "ecobee Routines Version ${getVersionNum()}" }
 
 /*
  *
+ * 0.1.5 - SendNotificationMessage so that the action shows up in Notification log after the mode/routine notices
  * 0.1.4 - Fix Custom Mode Handling
  *
  */
-
 
 definition(
 	name: "ecobee Routines",
@@ -99,7 +99,6 @@ def mainPage() {
     }
 }
 
-
 // Main functions
 def installed() {
 	LOG("installed() entered", 5)
@@ -110,7 +109,6 @@ def updated() {
 	LOG("updated() entered", 5)
 	unsubscribe()
     initialize()
-	
 }
 
 def initialize() {
@@ -199,7 +197,6 @@ private def normalizeSettings() {
     	state.expectedEvent = settings.modes
     }
 	LOG("state.expectedEvent set to ${state.expectedEvent}", 4)
-
 }
 
 def changeProgramHandler(evt) {
@@ -224,16 +221,16 @@ def changeProgramHandler(evt) {
         if(state.doResumeProgram == true) {
         	LOG("Resuming Program for ${stat}", 4, null, "trace")
         	stat.resumeProgram()
+			sendNotificationEvent("And I resumed normal programming on ${stat}.")
         } else {
         	LOG("Setting Thermostat Program to programParam: ${state.programParam} and holdType: ${state.holdTypeParam}", 4, null, "trace")
         	stat.setThermostatProgram(state.programParam, state.holdTypeParam)
+			sendNotificationEvent("And I set ${stat} to the ${state.programParam} program.")
 		}
         if (state.fanCommand != "" && state.fanCommand != null) stat."${state.fanCommand}"()
     }
     return true
 }
-
-
 
 // Helper Functions
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
