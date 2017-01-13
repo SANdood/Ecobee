@@ -161,6 +161,10 @@ def mainPage() {
 		section("Remove ecobee (Connect)") {
 			href ("removePage", description: "Tap to remove ecobee (Connect) ", title: "Remove ecobee (Connect)")
 		}            
+		
+		section ("Name this instance of ecobee (Connect)") {
+			label name: "name", title: "NAssign a name", required: true, defaultValue: app.name
+		}
      
 		section (getVersionLabel())
 	}
