@@ -1235,27 +1235,36 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                     	def revisions = resp.data.revisionList
 						def tstatUpdated = false
 						def rtimeUpdated = false
+                        String tstatsStr = ""
 						result = true
-						if (atomicState.lastRevisions != "foo") {
+						if (atomicState.lastRevisions == "foo") { // haven't finished (re)initializing yet
+                            tstatUpdated = true
+                            rtimeUpdated = true
+                            tstatsStr = thermostatIdsString // act like all the thermostats have changed
+                        } else {
 							result = false
 							for (i in 0..resp.data.thermostatCount - 1) {
-								def lastDetails = atomicState.lastRevisions[i].split(':')
-								def latestDetails = revisions[i].split(':')
+						    def lastDetails = atomicState.lastRevisions[i].split(':')
+						    def latestDetails = revisions[i].split(':')
 								if (lastDetails[0] == latestDetails[0]) {	// verify these are the same thermostat
 									if (lastDetails[5] != latestDetails[5]) rtimeUpdated = true
 									if (lastDetails[3] != latestDetails[3]) tstatUpdated = true
-								}
+                                } else {
+                                    rtimeUpdated = true // IDs didn't match, so assume everything changed for this thermostat
+                                    tstatUpdated = true
+                                }
+                                if (rtimeUpdated || tstatUpdated) {
+                                    result = true
+                                    tstatsStr = (tstatsStr=="") ? "${latestDetails[0]}" : (tstatsStr.contains("${latestDetails[0]}")) ? tstatsStr : tstatsStr + ",${latestDetails[0]}"
+                                }
 							}
-							if (tstatUpdated || rtimeUpdated) result = true		
-                            //atomicState.skipCount = atomicState.skipCount + 1
-                            
-   							atomicState.thermostatUpdated = tstatUpdated	// Revised: settings, program, event, device
-							// atomicState.alertsUpdated = false			// Revised: alerts (not using yet)
-							atomicState.runtimeUpdated = rtimeUpdated		// Revised: runtime, equip status, remote sensors, weather?
-							// atomicState.intervalUpdated = false			// Revised: 15-minute runtime report (not using)                     	
 						}
 						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
+                        atomicState.thermostatUpdated = tstatUpdated	// Revised: settings, program, event, device
+						atomicState.runtimeUpdated = rtimeUpdated		// Revised: runtime, equip status, remote sensors, weather?
+                        atomicState.changedThermostatIds = tstatsStr    // only these thermostats need to be requested in pollEcobeeAPI
 					}
+                    // if we get here, we had http status== 200, but API status != 0
 				} else {
 					LOG("checkThermostatSummary() - polling got http status ${resp.status}", 1, null, "error")
 				}
@@ -1303,13 +1312,19 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
         	return true		// act like we completed the heavy poll without error
 		}
 	}
-	
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '"' /*,"includeExtendedRuntime":"false","includeAlerts":"false"' */
+    
+    // Let's only check those thermostats that actually changed...unless this is a forcePoll - or if we are getting the weather 
+    // (we need to get weather for all therms at the same time, because we only update every 15 minutes and use the cached version
+    // the rest of the time)
+    String checkTherms = (forcePoll || atomicState.getWeather) ? thermostatIdsString : atomicState.changedThermostatIds
+    checkTherms = (checkTherms) ? checkTherms : thermostatIdsString
+	LOG("pollEcobeeAPI() - checking thermostats ${checkTherms}", 3)
+    
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '"'
 	
 	if (forcePoll || atomicState.thermostatUpdated) {
 		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true"'
 		LOG("pollEcobeeAPI() - getting thermostat", 3)
-        atomicState.getWeather = true			// get the weather any time that the thermostat object is updated (the next time that runtime is updated)
 	}
 	if (forcePoll || atomicState.runtimeUpdated) {
 		jsonRequestBody += ',"includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true"'
@@ -1444,53 +1459,6 @@ def poll(child) {
 	return pollChildren(null) // Poll ALL the children at the same time for efficiency    
 }
 
-// This ISN'T needed any more (and won't work as is, due to changes in what is saved in atomicState.thermostats
-/*
-def availableModes(child) {	
-	def tData = atomicState.thermostats[child.device.deviceNetworkId]
-    LOG("atomicState.thermostats = ${atomicState.thermostats}", 3, child)
-	LOG("Child DNI = ${child.device.deviceNetworkId}", 3, child)
-	LOG("Data = ${tData}", 3, child)
-	
-
-	if(!tData)
-	{
-		LOG("ERROR: Device connection removed? no data for ${child.device.deviceNetworkId} after polling", 1, child, "error")
-		return null
-	}
-
-	def modes = ["off"]
-
-	if (tData.data.heatMode) modes.add("heat")
-	if (tData.data.coolMode) modes.add("cool")
-	if (tData.data.autoMode) modes.add("auto")
-    // TODO: replace the use of auxHeatOnly with "emergencyHeat" to conform to the thermostatMode attributes allowed values
-    // if (tData.data.auxHeatMode) modes.add("emergency heat")
-	if (tData.data.auxHeatMode) modes.add("auxHeatOnly")
-
-	modes
-}
-*/
-
-// This ISN'T needed anymore either, and it won't work as is, due to changes in what is saved in atomicState.thermostats
-/*
-def currentMode(child) {
-	def tData = atomicState.thermostats[child.device.deviceNetworkId]
-	LOG("atomicState.thermostats = ${atomicState.thermostats}", 3, child)
-	LOG("Child DNI = ${child.device.deviceNetworkId}", 3, child)
-	LOG("Data = ${tData}", 3, child)
-
-	if(!tData) {
-		LOG("ERROR: Device connection removed? no data for ${child.device.deviceNetworkId} after polling", 1, child, "error")
-		return null
-	}
-
-	def mode = tData.data.thermostatMode
-
-	mode
-}
-*/
-
 def updateSensorData() {
 	LOG("Entered updateSensorData() ", 5)
  	def sensorCollector = [:]
@@ -1571,8 +1539,10 @@ def updateThermostatData() {
 	
 	atomicState.thermostats = atomicState.thermostatData.thermostatList.inject([:]) { collector, stat ->
 		def dni = [ app.id, stat.identifier ].join('.')
+		
+		def thermostatId = stat.identifier
 
-		LOG("Updating dni $dni, Got weather? ${atomicState.weather[i].forecasts[0].weatherSymbol.toString()}", 4)
+		LOG("Updating dni $dni", 4)
 
     // Handle things that only change when runtime object is updated)
         def occupancy = "not supported"
@@ -1601,7 +1571,7 @@ def updateThermostatData() {
         	}
 			if (atomicState.hasInternalSensors) { occupancy = (occupancy == "true") ? "active" : "inactive" }
 			
-			// Termperatures
+			// Temperatures
 			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[i].actualTemperature.toDouble() / 10), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
         	tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredHeat.toDouble() / 10), "F", settings.tempDecimals.toInteger())
         	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[i].desiredCool.toDouble() / 10), "F", settings.tempDecimals.toInteger())
@@ -1736,48 +1706,36 @@ def updateThermostatData() {
 		def coolStages = atomicState.settings[i].coolStages 
 		
 		def equipStatus = atomicState.equipmentStatus[i]
-		equipStatus = (equipStatus.size() == 0) ? 'idle' : equipStatus
-		def equipOpStat = equipStatus
+		def equipOpStat
+		if (equipStatus.size() == 0) {
+			equipStatus = 'idle'
+			equipOpStat = equipStatus
+		} else if (equipStatus == 'fan') {
+			equipOpStat = 'fan only'
+		} else if (equipStatus.contains('eat')) {					// heating
+			if 		(equipStatus.contains('eat1')) { equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages > 1) ? 'heat 1' : 'heating' }
+			else if (equipStatus.contains('eat2')) { equipOpStat = 'heat 2' }
+			else if (equipStatus.contains('eat3')) { equipOpStat = 'heat 3' }
+			else if (equipStatus.contains('ump2')) { equipOpStat = 'heat 2' }
+			else if (equipStatus.contains('ump3')) { equipOpStat = 'heat 3' }
+			else if (equipStatus.contains('Pump')) { equipOpStat = 'heat pump' }
+		} else if (equipStatus.contains('ool')) {				// cooling
+			if 		(equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
+			else if (equipStatus.contains('ool2')) { equipOpStat = 'cool 2' }
+		} // Other possible values include Humidifier, Dehumidifier, HRV, ERV, etc. but we don't handle these (yet)		
 		
-		// Generate the more detailed "equipmentOperatingState" value
-		def lastEquipStatus = "wow"
-		if (!atomicState.lastEquipStatus) {
-			atomicState.lastEquipStatus = ["foo", "bar"]
-			atomicState.lastEquipOpStat = ["rab", "oof"]
-		}
-		def lastEquipStatusList = atomicState.lastEquipStatus
-        def lastEquipOpStatList = atomicState.lastEquipOpStat
-		if (lastEquipStatusList.size() > i) { lastEquipStatus = lastEquipStatusList[i] }
-		if ( (lastEquipStatus != equipStatus) || (i > lastEquipOpStatList.size()) ) { 		// avoid the heavy lift, if we can
-			if (equipStatus == 'fan') { equipOpStat = 'fan only' }
-			else if (equipStatus.contains('eat')) {					// heating
-				if (equipStatus.contains('eat1')) { equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages == 1) ? 'heating' : 'heat 1' }
-				else if (equipStatus.contains('eat2')) { equipOpStat = 'heat 2' }
-				else if (equipStatus.contains('eat3')) { equipOpStat = 'heat 3' }
-				else if (equipStatus.contains('ump2')) { equipOpStat = 'heat 2' }
-				else if (equipStatus.contains('ump3')) { equipOpStat = 'heat 3' }
-				else if (equipStatus.contains('Pump')) { equipOpStat = 'heat pump' }
-			} else if (equipStatus.contains('ool')) {				// cooling
-				if (equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
-				else if (equipStatus.contains('ool2')) { equipOpStat = 'cool 2' }
-			}
-			LOG("updating equipment atomics for #${i} - ${equipStatus} * ${equipOpStat}", 4, null, "trace")
-            // can't directly manipulate lists in atomicState variables
-            lastEquipStatusList[i] = equipStatus
-            atomicState.lastEquipStatus = lastEquipStatusList
-			lastEquipOpStatList[i] = equipOpStat
-            atomicState.lastEquipOpStat = lastEquipOpStatList
-		} else {	
-			equipOpStat = lastEquipOpStatList[i]			// hasn't changed, use the old value
-			LOG("using old equipment ${lastEquipOpStat}", 4, null, "trace")
-		}		
-		
-        // we always send these
+		// Update the API link state and the lastPoll data. If we aren't running at a high debugLevel >= 4, then supply simple
+		// poll status instead of the date/time (this simplifies the UI presentation, and reduces the chatter in the devices'
+		// message log
+        def apiConnection = apiConnected()
+        def lastPoll = (debugLevel(4)) ? atomicState.lastPollDate : (apiConnection=='full') ? "Succeeded" : (apiConnection=='warn') ? "Incomplete" : "Failed"
+        
+		// we always send these because they change independent of the ecobee API objects
         def data = [
-           	decimalPrecision: tempDecimals,
+           	decimalPrecision: settings.tempDecimals,
 			temperatureScale: getTemperatureScale(),
-			lastPoll: atomicState.lastPollDate,
-			apiConnected: apiConnected(),
+			lastPoll: lastPoll,
+			apiConnected: apiConnection,
         	timeOfDay: atomicState.timeOfDay,
 			debugLevel: settings.debugLevel.toInteger()
         ]
@@ -1829,27 +1787,9 @@ def updateThermostatData() {
 				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
 			]
 		}
-	
-		//* I DON'T THINK THIS IS USED ANYWHERE!!!
-	    // Extract Climates
-/*		
-		LOG("Climates available: ${atomicState.program[i].climates}", 4)
-        def climateData = atomicState.program[i].climates
-    
-        climateData.each { climate ->
-        	LOG("Climate found: ${climate}", 5)
-            
-        	if( climate.climateRef.contains('smart') ) {
-            	LOG("Climate contained smart: Ref:${climate.climateRef} - Name:${climate.name}", 5)
-                data["${climate.climateRef}"] = climate.name
-            } else {
-            	LOG("Climate was standard type: ${climate}", 5)
-            }            
-		}
-*/
 		LOG("Event Data (${i}) = ${data}", 4)
 
-		collector[dni] = [data:data /*,climateData:climateData */]
+		collector[dni] = [thermostatId:thermostatId, data:data /*,climateData:climateData */]
 		i++
 		return collector
 	}			
