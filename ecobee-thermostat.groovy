@@ -563,17 +563,14 @@ def generateEvent(Map results) {
 			} else if (name=="equipmentOperatingState") {
 				generateEquipmentStateEvent(value)
 			} else if (name=='lastPoll') {
-				// isChange = isStateChange(device, name, value.toString())   // this is ALWAYS changed
-				// only display the poll times if at debugLevel 4 or 5
-				isDisplayed = (device.currentValue("debugLevel") > 3)
-				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: isDisplayed]
+				isChange = isStateChange(device, name, value.toString())
+				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
 			} else if (name=="debugLevel") {
 				isChange = isStateChange(device, name, value.toString())
 				event = eventFront +  [value: value.toString(), isStateChange: isChanged, displayed: false]
             } else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
-                // isDisplayed = isChange
                 if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
             } else if (name=="weatherSymbol" && device.currentValue("timeOfDay") == "night") {
             	// Check to see if it is night time, if so change to a night symbol
@@ -623,10 +620,10 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Decimal precision set to ${value}"
             break;
         case 'equipmentStatus':
-			return (value == 'idle') ? "Equipment is idle" : "Equipment ${value} is running"
+			return (value == 'idle') ? "Equipment is idle" : "Equipment: ${value} running"
             break;
         case 'lastPoll':
-        	return "Poll ${value}"
+        	return "Poll: ${value}"
             break;
         case 'humidity':
         	return "Humidity is ${value}%"
@@ -635,7 +632,7 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Humidity setpoint is ${value}%"
             break;
 		case 'thermostatHold':
-			return (value == "") ? 'Hold released' : (value == 'hold') ? 'Hold for program or temp' : "Hold for ${value}"
+			return (value == "") ? 'Hold finished' : (value == 'hold') ? 'Hold for program or temp' : "Hold for ${value}"
 			break;
 		default:
 			return "${name} is ${value}"
