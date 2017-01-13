@@ -117,6 +117,8 @@ metadata {
 		attribute "coolRange", "string"
 		attribute "thermostatHold", "string"
 		
+		attribute "debugLevel", "number"
+		
         attribute "smart1", "string"
         attribute "smart2", "string"
         attribute "smart3", "string"
@@ -560,6 +562,14 @@ def generateEvent(Map results) {
                 return
 			} else if (name=="equipmentOperatingState") {
 				generateEquipmentStateEvent(value)
+			} else if (name=='lastPoll') {
+				// isChange = isStateChange(device, name, value.toString())   // this is ALWAYS changed
+				// only display the poll times if at debugLevel 4 or 5
+				isDisplayed = (device.currentValue("debugLevel") > 3)
+				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: isDisplayed]
+			} else if (name=="debugLevel") {
+				isChange = isStateChange(device, name, value.toString())
+				event = eventFront +  [value: value.toString(), isStateChange: isChanged, displayed: false]
             } else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
@@ -613,7 +623,7 @@ private getThermostatDescriptionText(name, value, linkText) {
         	return "Decimal precision set to ${value}"
             break;
         case 'equipmentStatus':
-        	return "Equipment running: ${value}"
+			return (value == 'idle') ? "Equipment is idle" : "Equipment ${value} is running"
             break;
         case 'lastPoll':
         	return "Poll ${value}"
@@ -797,7 +807,7 @@ void resumeProgram() {
 		LOG("resumeProgram() is done", 5)
 		sendEvent("name":"resumeProgram", "value":"resume", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 	} else {
-		sendEvent("name":"thermostatStatus", "value":"failed resume click refresh", "description":statusText, displayed: false)
+		sendEvent("name":"thermostatStatus", "value":"failed resume, click refresh", "description":statusText, displayed: false)
 		LOG("Error resumeProgram() check parent.resumeProgram(this, deviceId)", 2, null, "error")
 	}
 
@@ -841,7 +851,6 @@ def setThermostatMode(String value) {
     if (value=="emergency" || value=="emergencyHeat") { value = "auxHeatOnly" }    
 	LOG("setThermostatMode(${value})", 5)
 	generateQuickEvent("thermostatMode", value)
-
 
     def deviceId = getDeviceId()
 	if (parent.setMode(this, value, deviceId)) {
@@ -898,7 +907,7 @@ def setThermostatProgram(program, holdType=null) {
 	LOG("Before calling parent.setProgram()", 5)
 	
     def sendHoldType = holdType ?: whatHoldType()
-    
+    poll()		// need to know if scheduled program changed recently
 	
 	// if the requested program is the same as the one that is supposed to be running, then just resumeProgram
 	// but only if this is NOT a permanent hold request
