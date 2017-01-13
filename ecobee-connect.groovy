@@ -1430,8 +1430,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 }
 
 // poll() will be called on a regular interval using an runEveryX command
-def poll() {		
-    LOG("poll() - Running at ${getTimestamp()} (epic: ${now()})", 3, null, "trace")
+def poll(child) {		
+    LOG("poll() - Running at ${getTimestamp()} (epic: ${now()})", 3, child, "trace")
 
     // Check to see if we are connected to the API or not
     if (apiConnected() == "lost") {
@@ -1439,7 +1439,8 @@ def poll() {
         return false
     }    
 	
-	LOG("poll() - Polling children with pollChildren(null)", 4)
+	LOG("poll() - Polling children with pollChildren(null) (requested by ${child})", 4)
+	// if (child) atomicState.forcePoll = true		// if child is requesting the poll, then make sure we update EVERYTHING
 	return pollChildren(null) // Poll ALL the children at the same time for efficiency    
 }
 
@@ -1777,7 +1778,8 @@ def updateThermostatData() {
 			temperatureScale: getTemperatureScale(),
 			lastPoll: atomicState.lastPollDate,
 			apiConnected: apiConnected(),
-        	timeOfDay: atomicState.timeOfDay
+        	timeOfDay: atomicState.timeOfDay,
+			debugLevel: settings.debugLevel.toInteger()
         ]
             
         if (forcePoll || atomicState.thermostatUpdated) {	// new settings, programs or events
