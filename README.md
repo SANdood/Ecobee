@@ -6,7 +6,7 @@ I hereby contribute my edits and additions to the same Open Source domain as the
 
 Notable Enhancements and Changes
 --------------------------------
-This work repressents a significant overhaul of the aforemention prior implementation. Most notable of these include:
+This work represents a significant overhaul of the aforemention prior implementation. Most notable of these include:
 * <b>Efficiency and Performance</b>
   * A <i>significant</i> reduction in the frequency and amount of data collected from the Ecobee cloud servers. Instead of requesting all the information for all of the thermostats each time the Ecobee API is polled, this implementation will:
     * Do a lightweight <code>"thermostatSummary"</code> poll to determine which thermostat objects have changed (and for which thermostats, if there are more than one) since the last time data was retrieved from the API. The only two objects of interest to this implementation are:
