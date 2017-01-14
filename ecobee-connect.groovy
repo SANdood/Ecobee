@@ -1149,14 +1149,20 @@ def pollChildren(child = null) {
 		return true
     }    
     
-   // Check to see if it is time to do an full poll to the Ecobee servers. If so, execute the API call and update ALL children
-    def timeSinceLastPoll = (atomicState.forcePoll == true) ? 0 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
-    LOG("Time since last poll? ${timeSinceLastPoll} -- atomicState.lastPoll == ${atomicState.lastPoll}", 3, child, "info")
-    
-    // Also, check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
+    def timeSinceLastPoll 
+    boolean somethingChanged = true
     String thermostatsToPoll = getChildThermostatDeviceIdsString()
-    boolean somethingChanged = checkThermostatSummary(thermostatsToPoll)
-	
+    if (child == null) { // normal call
+   		// Check to see if it is time to do an full poll to the Ecobee servers. If so, execute the API call and update ALL children
+    	timeSinceLastPoll = (atomicState.forcePoll == true) ? 0 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
+    	LOG("Time since last poll? ${timeSinceLastPoll} -- atomicState.lastPoll == ${atomicState.lastPoll}", 3, child, "info")
+    
+    	// Also, check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
+    	somethingChanged = checkThermostatSummary(thermostatsToPoll)
+	} else {
+    	atomicState.forcePoll = true	// called by a child - do a forcePoll
+    }
+    
     if ( (atomicState.forcePoll == true) || somethingChanged /* || ( timeSinceLastPoll > getMinMinBtwPolls().toDouble() ) */ ) {
     	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
         LOG("pollChildren() - Getting changes", 3, child)
