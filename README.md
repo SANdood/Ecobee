@@ -11,9 +11,9 @@ This work represents a significant overhaul of the aforemention prior implementa
   * A <i>significant</i> reduction in the frequency and amount of data collected from the Ecobee cloud servers. Instead of requesting all the information for all of the thermostats each time the Ecobee API is polled, this implementation will:
     * Do a lightweight <code>"thermostatSummary"</code> poll to determine which thermostat objects have changed (and for which thermostats, if there are more than one) since the last time data was retrieved from the API. The only two objects of interest to this implementation are:
     * <code>thermostat: settings, programs, events, <strike>devices</strike></code>
-      * <code>runtime: runtime (temperatures, humidity, etc.), equipmentStatus, remoteSensors, weather</code>
-       * The <code>remoteSensors</code> object is only requested if one or more sensors have been selected in the configuration (including showing thermostats as sensors)
-        * The <code>weather</code> object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes).
+    * <code>runtime: runtime (temperatures, humidity, etc.), equipmentStatus, remoteSensors, weather</code>
+      * The <code>remoteSensors</code> object is only requested if one or more sensors have been selected in the configuration (including showing thermostats as sensors)
+      * The <code>weather</code> object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes).
     * It will then call the Ecobee API to request only the data objects that have indicated changes, and only for the thermostats that have changed (in cases where multiple thermostats are being used);
       * In particular, the <code>thermostat</code> object rarely changes, yet it can represent more than 6000 bytes of data for each thermostat. Not requesting this on every call makes a massive difference...
   
@@ -25,6 +25,7 @@ This work represents a significant overhaul of the aforemention prior implementa
 * <b>User Interface Enhancements</b>
   * Thermostat devices
     * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump) or stage (heat 1/heat 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
+    * The aforementioned change to Last Poll display based upon debugLevel to reduce data transferred from the SmartApp to the thermostat device has the side benefit of virtually eliminating the "chatter" in the devices' "Recent" message log in the Mobile App. This makes it easier to review when various data element changes were reported to the UI.
   * Sensor devices
     * A new multiAttributeTile replaces the old presentation, with temperature as the primary display value, and motion displayed in the bottom left corner;
   * All devices
