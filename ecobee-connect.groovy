@@ -1407,7 +1407,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     generateEventLocalParams() // Update the connection status
                 }
                 def tNames = resp.data.thermostatList?.name.toString()
-				LOG("pollEcobeeAPI() httpGet: updated ${atomicState.thermostats?.size()} stats: ${tNames} ${atomicState.thermostats}", 1, null, "info")
+                def numStats = atomicState.thermostats?.size()
+				LOG("pollEcobeeAPI() httpGet: updated ${numStats} thermostat${(numStats>1)?'s':''}: ${tNames} ${atomicState.thermostats}", 1, null, "info")
 			} else {
 				LOG("pollEcobeeAPI() - polling children & got http status ${resp.status}", 1, null, "error")
 
