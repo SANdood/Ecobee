@@ -1331,12 +1331,17 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 		LOG("pollEcobeeAPI() - getting thermostat", 3)
 	}
 	if (forcePoll || atomicState.runtimeUpdated) {
-		jsonRequestBody += ',"includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true"'
+		jsonRequestBody += ',"includeRuntime":"true","includeEquipmentStatus":"true"'
         String gw = ''
+		if (settings.ecobeesensors?.size() > 0) {
+			jsonRequestBody += ',"includeSensors":"true"'
+			gw = ' & sensors'
+		}
         if (atomicState.getWeather) {
         	jsonRequestBody += ',"includeWeather":"true"'		// time to get the weather report (only changes every 15 minutes or so - watchdog sets this when it runs)
-            gw = ' and weather'
+            gw += ' & weather'
         }
+
 		LOG("pollEcobeeAPI() - getting runtime" + gw, 3)
 	}
 	jsonRequestBody += '}}'
