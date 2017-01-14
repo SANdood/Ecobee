@@ -1732,9 +1732,9 @@ def updateThermostatData() {
 			if 		(equipStatus.contains('eat1')) { equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages > 1) ? 'heat 1' : 'heating' }
 			else if (equipStatus.contains('eat2')) { equipOpStat = 'heat 2' }
 			else if (equipStatus.contains('eat3')) { equipOpStat = 'heat 3' }
-			else if (equipStatus.contains('ump2')) { equipOpStat = 'heat 2' }
-			else if (equipStatus.contains('ump3')) { equipOpStat = 'heat 3' }
-			else if (equipStatus.contains('Pump')) { equipOpStat = 'heat pump' }
+			else if (equipStatus.contains('ump2')) { equipOpStat = 'heat pump 2' }
+			else if (equipStatus.contains('ump3')) { equipOpStat = 'heat pump 3' }
+			else if (equipStatus.contains('ump')) { equipOpStat = 'heat pump' }
 		} else if (equipStatus.contains('ool')) {				// cooling
 			if 		(equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
 			else if (equipStatus.contains('ool2')) { equipOpStat = 'cool 2' }
