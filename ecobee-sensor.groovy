@@ -83,7 +83,7 @@ def refresh() {
 
 void poll() {
 	LOG( "Ecobee Sensor: Executing 'poll' using parent SmartApp", 4, this, "trace")
-	parent.pollChildren(this)
+	parent.pollChildren(this)  // request a forcePoll of ALL devices by including "this"
 }
 
 
