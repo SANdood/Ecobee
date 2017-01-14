@@ -518,7 +518,7 @@ def refresh() {
 
 void poll() {
 	LOG("Executing 'poll' using parent SmartApp")
-    parent.pollChildren() //parent will poll ALL the thermostats 
+    parent.pollChildren(this) //parent will poll ALL the thermostats 
 }
 
 def generateEvent(Map results) {
