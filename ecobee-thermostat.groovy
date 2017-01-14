@@ -1322,7 +1322,12 @@ private def whatHoldType() {
 }
 
 private debugLevel(level=3) {
-	def debugLvlNum = device.currentValue("debugLevel").toInteger() ?: parent.settings.debugLevel?.toInteger() ?: 3
+	def debugLvlNum
+    if (device.currentValue("debugLevel")) {
+		debugLvlNum = device.currentValue("debugLevel").toInteger() ?: parent.settings.debugLevel?.toInteger() ?: 3
+    } else {
+    	debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
+    }
     def wantedLvl = level?.toInteger()
     
     return ( debugLvlNum >= wantedLvl )
