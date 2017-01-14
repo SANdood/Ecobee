@@ -163,7 +163,7 @@ def mainPage() {
 		}            
 		
 		section ("Name this instance of ecobee (Connect)") {
-			label name: "name", title: "NAssign a name", required: true, defaultValue: app.name
+			label name: "name", title: "Assign a name", required: true, defaultValue: app.name
 		}
      
 		section (getVersionLabel())
