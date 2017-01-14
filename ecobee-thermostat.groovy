@@ -117,7 +117,7 @@ metadata {
 		attribute "coolRange", "string"
 		attribute "thermostatHold", "string"
 		
-		attribute "debugLevel", "number"
+		// attribute "debugLevel", "number"
 		
         attribute "smart1", "string"
         attribute "smart2", "string"
@@ -1320,7 +1320,7 @@ private def whatHoldType() {
 }
 
 private debugLevel(level=3) {
-	def debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
+	def debugLvlNum = device.currentValue("debugLevel").toInteger() ?: parent.settings.debugLevel?.toInteger() ?: 3
     def wantedLvl = level?.toInteger()
     
     return ( debugLvlNum >= wantedLvl )
