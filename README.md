@@ -24,7 +24,7 @@ This work represents a significant overhaul of the aforemention prior implementa
   
 * <b>User Interface Enhancements</b>
   * Thermostat devices
-    * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump) or stage (heat 1/heat 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
+    * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump/emergency heat) or stage (heat 1/heat 2/cool 1/cool 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
     * The aforementioned change to Last Poll display based upon debugLevel to reduce data transferred from the SmartApp to the thermostat device has the side benefit of virtually eliminating the "chatter" in the devices' "Recent" message log in the Mobile App. This makes it easier to review when various data element changes were reported to the UI.
   * Sensor devices
     * A new multiAttributeTile replaces the old presentation, with temperature as the primary display value, and motion displayed in the bottom left corner;
