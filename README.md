@@ -8,16 +8,19 @@ Notable Enhancements and Changes
 --------------------------------
 This work repressents a significant overhaul of the aforemention prior implementation. Most notable of these include:
 * <b>Efficiency and Performance</b>
-  * A <i>significant</i> reduction in the amount of data collected from the Ecobee cloud servers. Instead of requesting all the information for all of the thermostats each time the Ecobee API is polled, this implementation will:
-    * Do a lightweight "thermostatSummary" poll to determine which thermostat objects have changed since the last time data was retrieved from the API. The only two objects of interest to this implementation are:
-      * thermostat: settings, programs, events, device
-      * runtime: runtime (temperature & status changes), equipmentStatus, weather
-        * NOTE: the weather object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes).
-    * Request only the data objects that have indicated changes, and only for the thermostats that have changed (in cases where multiple thermostats are being used);
+  * A <i>significant</i> reduction in the frequency and amount of data collected from the Ecobee cloud servers. Instead of requesting all the information for all of the thermostats each time the Ecobee API is polled, this implementation will:
+    * Do a lightweight <code>"thermostatSummary"</code> poll to determine which thermostat objects have changed (and for which thermostats, if there are more than one) since the last time data was retrieved from the API. The only two objects of interest to this implementation are:
+    * <code>thermostat: settings, programs, events, <strike>devices</strike></code>
+      * <code>runtime: runtime (temperatures, humidity, etc.), equipmentStatus, remoteSensors, weather</code>
+       * The <code>remoteSensors</code> object is only requested if one or more sensors have been selected in the configuration (including showing thermostats as sensors)
+        * The <code>weather</code> object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes).
+    * It will then call the Ecobee API to request only the data objects that have indicated changes, and only for the thermostats that have changed (in cases where multiple thermostats are being used);
+      * In particular, the <code>thermostat</code> object rarely changes, yet it can represent more than 6000 bytes of data for each thermostat. Not requesting this on every call makes a massive difference...
   
-  * A <i>significant</i> reduction in the amount of data sent from the (connect) SmartApp to the individual ecobee thermostat device(s):
-    * Only data from the changed object(s) is sent. While this is likely to include some data elements that have not changed, it does significantly reduce the amount of work the device driver has to do for each update;
-    * If debugLevel is set to 3 or lower, the "Last Poll" date and time is not sent; instead the thermostat devices' UI will show polling status as Succeeded/Incomplete/Failed. Changing the debugLevel in the SmartApp will dynamically cause the child thermostat(s) to begin displaying date of last poll;
+  * A <i>significant</i> reduction in the amount of data sent from the Ecobee (connect) SmartApp to the individual ecobee thermostat device(s):
+    * Only data from the changed object(s) is sent. While this is likely to include some individual data elements that have not changed, it does significantly reduce the amount of work the SmartApp and device driver has to do for each update;
+
+    * If debugLevel is set to 3 or lower in the SmartApp, the "Last Poll" date and time is not sent; instead the thermostat devices' UI will show polling status as Succeeded/Incomplete/Failed. Changing the debugLevel in the SmartApp will dynamically cause the child thermostat(s) to begin displaying date of last poll;
   
 * <b>User Interface Enhancements</b>
   * Thermostat devices
@@ -25,7 +28,7 @@ This work repressents a significant overhaul of the aforemention prior implement
   * Sensor devices
     * A new multiAttributeTile replaces the old presentation, with temperature as the primary display value, and motion displayed in the bottom left corner;
   * All devices
-    * Now has the ability to display 0, 1 or 2 decimal places of precision for thermostats and sensors. The default for metric locales is 1 decimal place (e.g. 25.2°C) and for imperial locales is 0 (e.g., 71° F). These defaults can be overridded in the Ecobee (Connect) SmartApp, and changes take effect from that point on;
+    * Now has the ability to display 0, 1 or 2 decimal places of precision for thermostats and sensors. The default for metric locales is 1 decimal place (e.g. 25.2°) and for imperial locales is 0 (e.g., 71°). These defaults can be overridded in the preferences section Ecobee (Connect) SmartApp, and changes take effect from that point on;
       * NOTE: Currently, changing the display precision also changes the value maintained internally for the SmartThings temperature attributes. This may be changed in the future such that full precision is always maintained internally, and only the display precision is configurable.
       
 * <b>Operational Enhancements</b>
@@ -43,11 +46,12 @@ This work repressents a significant overhaul of the aforemention prior implement
   * Help Applications: The Mode/Program helper app will now add a message to the location's Notifications log when it changes the thermostats' Program (Climate). This should appear as an extension to the <code>"I have changed mode to [SmartThings mode]..."</code> notification, and appears as <code>"and I have also set the [thermostat name] to [thermostat program name]</code>"
   * Thermostat attributes: Virtually ALL of the significant thermostat attributes provided by the Ecobee API are now reflected in the thermostat device as Attributes. This allows SmartThings developers to query more detail about a specific thermostat without having to interface to the API directly. The accessible Attributes (and the current values) appear in the device report for each thermostat; these can be accessed programatically as <code><i>deviceId</i>.currentValue("<i>AttributeName</i>")</code>
   * Internal Data Store: Of necessity to impliment its efficient use of the Ecobee API, the Ecobee (Connect) SmartApp maintains a rather large amount of static data (in atomicState). This adds some computational and memory overhead, and therefor every effort has been made to reduce repeated calls for atomicState data, to store as little data as efficiently possible, and to update that data as infrequently as possible.
+   * Each of the Ecobee API data objects is now stored in a separate atomicState Map. The Map <code>atomicState.thermostatData[]</code> no longer stores ALL the data for ALL the thermostats and sensors. Instead, it only includes the requested subset of data returned by the last call to the Ecobee API. (This necessitated an extensive overhaul of the original code to change how the stored data is accessed, since each object can now be independently updated).
     * NOTE: There is still room to further reduce the amount of data stored in atomicState, I just haven't felt the urge to delve into the operational complexity this would add. Unless SmartThings says we have to change this, it will likely remain as-is.
   
 * <b>Bug Fixes</b>
-  * The older code would sometimes truncate decimal values to an integer, changing (for example) 72.8° into 72°, while the thermostat   itself would display this as 73°. All decimal values are now mathematically rounded, such that 72.4° displays as 72°, and 72.5° displays as 73° (if decimal precision is set to 0).
-  * The old code defined a "sleep()" command, and allowed you to request Sleep mode via button press in the UI - these never worked (in fact, silently failed) because it is not possible to overload the built-in sleep() function of the SmartThings/Groovy/S3 environment. Thus, the sleep() call has been replaced with two new calls: asleep() and night(). The UI now properly supports changing to sleep() mode.
+  * The prior version would sometimes truncate decimal values to an integer, changing (for example) 72.8° into 72°, while the thermostat   itself would display this as 73°. All decimal values are now mathematically rounded, such that 72.4° displays as 72°, and 72.5° displays as 73° (if decimal precision is set to 0).
+  * The prior version defined a "sleep()" command, and allowed you to request Sleep mode via button press in the UI - these never worked (in fact, silently failed) because it is not possible to overload the built-in sleep() function of the SmartThings/Groovy/Amazon S3 environment. Thus, the sleep() call has been replaced with two new calls: asleep() and night(), and the UI now properly supports changing to sleep() mode.
  
 Notes, Warning and Caveats
 --------------------------
