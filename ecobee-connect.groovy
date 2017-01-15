@@ -1254,20 +1254,26 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                         } else {
 							result = false
 							for (i in 0..resp.data.thermostatCount - 1) {
-						    def lastDetails = atomicState.lastRevisions[i].split(':')
-						    def latestDetails = revisions[i].split(':')
+						    	def lastDetails = atomicState.lastRevisions[i].split(':')
+						    	def latestDetails = revisions[i].split(':')
+                            	def tru = false
+                                def ttu = false
 								if (lastDetails[0] == latestDetails[0]) {	// verify these are the same thermostat
-									if (lastDetails[5] != latestDetails[5]) rtimeUpdated = true
-									if (lastDetails[3] != latestDetails[3]) tstatUpdated = true
+									if (lastDetails[5] != latestDetails[5]) tru = true // rtimeUpdated = true
+									if (lastDetails[3] != latestDetails[3]) ttu = true // tstatUpdated = true
                                 } else {
-                                    rtimeUpdated = true // IDs didn't match, so assume everything changed for this thermostat
-                                    tstatUpdated = true
-                                }
-                                if (rtimeUpdated || tstatUpdated) {
+                                    tru = true // IDs didn't match, so assume everything changed for this thermostat
+                                    ttu = true
+								}
+                                if (tru || ttu) {
+                                	rtimeUpdated = (tstatUpdated || tru)
+                                    tstatUpdated = (rtimeUpdated || ttu)
                                     result = true
                                     tstatsStr = (tstatsStr=="") ? "${latestDetails[0]}" : (tstatsStr.contains("${latestDetails[0]}")) ? tstatsStr : tstatsStr + ",${latestDetails[0]}"
                                 }
 							}
+						}
+						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
 						}
 						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
                         atomicState.thermostatUpdated = tstatUpdated	// Revised: settings, program, event, device
