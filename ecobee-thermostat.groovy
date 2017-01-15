@@ -841,7 +841,7 @@ def generateOperatingStateEvent(operatingState) {
 def generateEquipmentStateEvent(equipStat) {
 	LOG("generateEquipmentStateEvent() with state: ${equipStat}", 4)
 	// we hide this one from the device notifications because it's redundant with equipmentStatus (which has even more info)
-	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: false)		 
+	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: true)		 
 }
 
 def setThermostatMode(String value) {
