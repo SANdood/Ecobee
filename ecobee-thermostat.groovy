@@ -386,6 +386,17 @@ metadata {
 			state "cool 2", /* action:"noOp", label: "cool 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_2.png"
 			state "heating", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat.png"
 			state "cooling", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_cool.png"
+			state "emergency hum", /* action:"noOp", label: "emergency", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_emergency+humid.png"
+            state "heat pump hum", /* action:"noOp", label: "heat pump", */ icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat+humid.png"
+            state "heat 1 hum", /* action:"noOp", label: "heat 1", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_1+humid.png"
+			state "heat 2 hum", /* action:"noOp", label: "heat 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_2+humid.png"
+			state "heat 3 hum", /* action:"noOp", label: "heat 3", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_3+humid.png"
+			state "heat pump 2 hum", /* action:"noOp", label: "heat pump 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_2+humid.png"
+			state "heat pump  hum3", /* action:"noOp", label: "heat pump 3", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_3+humid.png"
+			state "cool 1 hum", /* action:"noOp", label: "cool 1", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_1-humid.png"
+			state "cool 2 hum", /* action:"noOp", label: "cool 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_2-humid.png"
+			state "heating hum", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat+humid.png"
+			state "cooling hum", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_cool-humid.png"
             // Issue reported that the label overlaps. Need to remove the icon
             state "default", action:"noOp", label: '${currentValue}', icon: "st.nest.empty"
 		}
@@ -797,7 +808,17 @@ void setCoolingSetpoint(Double setpoint) {
 
 void resumeProgram() {
 	// TODO: Put a check in place to see if we are already running the program. If there is nothing to resume, then save the calls upstream
-	LOG("resumeProgram() is called", 5)
+	def thermostatHold = device.currentValue("thermostatHold")
+	if (thermostatHold == "") {
+		LOG("resumeProgram() but no current hold", 3)
+		return
+	} else if (thermostatHold == "vacation") {
+		LOG("resumeProgram() - cannot resume from ${thermostatHold} hold", 3, null, "error")
+		return
+	} else {
+		LOG("resumeProgram() is called, hold type is ${thermostatHold}", 4)
+	}
+	
 	sendEvent("name":"thermostatStatus", "value":"Resuming schedule...", "description":statusText, displayed: false)
 	def deviceId = getDeviceId()
 	if (parent.resumeProgram(this, deviceId)) {
