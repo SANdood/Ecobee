@@ -451,7 +451,7 @@ metadata {
 			state "121",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_fog_18_fc.png" // Dust
 		}
         standardTile("weatherTemperature", "device.weatherTemperature", width: 2, height: 2, decoration: "flat") {
-			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/thermometer.png"
+			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
 		}
         
         valueTile("lastPoll", "device.lastPoll", height: 2, width: 4, decoration: "flat") {
