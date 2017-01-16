@@ -51,6 +51,7 @@ This work represents a significant overhaul of the aforemention prior implementa
   * Internal Data Store: Of necessity to impliment its efficient use of the Ecobee API, the Ecobee (Connect) SmartApp maintains a rather large amount of static data (in atomicState). This adds some computational and memory overhead, and therefor every effort has been made to reduce repeated calls for atomicState data, to store as little data as efficiently possible, and to update that data as infrequently as possible.
     * Each of the Ecobee API data objects is now stored in a separate atomicState Map. The Map <code>atomicState.thermostatData[]</code> no longer stores ALL the data for ALL the thermostats and sensors. Instead, it only includes the requested subset of data returned by the last call to the Ecobee API. (This necessitated an extensive overhaul of the original code to change how the stored data is accessed, since each object can now be independently updated).
     * NOTE: There is still room to further reduce the amount of data stored in atomicState, I just haven't felt the urge to delve into the operational complexity this would add. Unless SmartThings says we have to change this, it will likely remain as-is.
+ * Changed weather icons to use the 3-color scheme of the thermostat (cyan, white, gold), plus grey for fog/smoke/haze
  * Deleted a lot of code that was no longer being used
   
 * <b>Bug Fixes</b>
