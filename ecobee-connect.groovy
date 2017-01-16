@@ -1264,7 +1264,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
                                 } else {
                                     tru = true // IDs didn't match, so assume everything changed for this thermostat
                                     ttu = true
-								}
+                                }
                                 if (tru || ttu) {
                                 	rtimeUpdated = (tstatUpdated || tru)
                                     tstatUpdated = (rtimeUpdated || ttu)
@@ -1274,8 +1274,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 							}
 						}
 						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
-						}
-						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
+                        // if (result) log.debug "${tstatsStr}\n${atomicState.lastRevisions}\n${revisions}"
                         atomicState.thermostatUpdated = tstatUpdated	// Revised: settings, program, event, device
 						atomicState.runtimeUpdated = rtimeUpdated		// Revised: runtime, equip status, remote sensors, weather?
                         atomicState.changedThermostatIds = tstatsStr    // only these thermostats need to be requested in pollEcobeeAPI
@@ -1332,7 +1331,10 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
     // Let's only check those thermostats that actually changed...unless this is a forcePoll - or if we are getting the weather 
     // (we need to get weather for all therms at the same time, because we only update every 15 minutes and use the cached version
     // the rest of the time)
-    String checkTherms = (forcePoll || atomicState.getWeather) ? thermostatIdsString : atomicState.changedThermostatIds
+	
+	// HACK - force getting ALL thermostats when any one of them is updated, so that the atomicState.settings/programs/events always
+	// contain the data for ALL the thermostats. Will fix this soon (I hope)
+    String checkTherms = (forcePoll || atomicState.thermostatUpdated || atomicState.getWeather ) ? thermostatIdsString : atomicState.changedThermostatIds
     checkTherms = (checkTherms) ? checkTherms : thermostatIdsString
 	LOG("pollEcobeeAPI() - checking thermostats ${checkTherms}", 3)
     
@@ -1741,11 +1743,14 @@ def updateThermostatData() {
 			else if (equipStatus.contains('ump2')) { equipOpStat = 'heat pump 2' }
 			else if (equipStatus.contains('ump3')) { equipOpStat = 'heat pump 3' }
 			else if (equipStatus.contains('ump')) { equipOpStat = 'heat pump' }
+			if (equipStatus.contains('humid')) { equipOpStat += ' hum' }	// humidifying if heat
 		} else if (equipStatus.contains('ool')) {				// cooling
 			if 		(equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
 			else if (equipStatus.contains('ool2')) { equipOpStat = 'cool 2' }
+			if (equipStatus.contains('dehum')) { equipOpStat += ' hum' }	// dehumidifying if cool
 		} // Other possible values include Humidifier, Dehumidifier, HRV, ERV, etc. but we don't handle these (yet)		
 		
+											
 		// Update the API link state and the lastPoll data. If we aren't running at a high debugLevel >= 4, then supply simple
 		// poll status instead of the date/time (this simplifies the UI presentation, and reduces the chatter in the devices'
 		// message log
@@ -1982,8 +1987,11 @@ def resumeProgram(child, deviceId) {
     def currentFanMinOnTime = getFanMinOnTime(child)
     def previousHVACMode = atomicState."previousHVACMode${deviceId}"
     def currentHVACMode = getHVACMode(child)
+    // def currentHoldType = child.currentValue("thermostatHold")		// TODO: If we are in a vacation hold, need to delete the vacation
     
-    LOG("resumeProgram() - atomicState.previousHVACMode = ${previousHVACMode} current (${currentHVACMode})   atomicState.previousFanMinOnTime = ${previousFanMinOnTime} current (${currentFanMinOnTime})", 4, child)	
+    // theoretically, if currentHoldType == "", we can skip all of this...theoretically
+    
+    LOG("resumeProgram() - atomicState.previousHVACMode = ${previousHVACMode} current (${currentHVACMode})   atomicState.previousFanMinOnTime = ${previousFanMinOnTime} current (${currentFanMinOnTime})", 3, child)	
     if ((previousHVACMode != null) && (currentHVACMode != previousHVACMode)) {
     	// Need to reset the HVAC Mode back to the previous state
         if (currentHVACMode == "off") { atomicState.offFanModeOn = false }
@@ -2003,12 +2011,13 @@ def resumeProgram(child, deviceId) {
     }
         
     // 					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
-    def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"}}'
+    def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","resumeAll":"true"}}'
 	LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(jsonRequestBody) && result
     LOG("resumeProgram(child) with result ${result}", 3, child)
-
+	
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result
 }
 
@@ -2021,6 +2030,7 @@ def setHVACMode(child, deviceId, mode) {
     def result = sendJson(child, jsonRequestBody)
     LOG("setHVACMode(child) with result ${result}", 3, child)    
 
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result
 }
 
@@ -2033,6 +2043,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(child) with result ${result}", 3, child)    
 
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result
 }
 
@@ -2062,6 +2073,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType=null, fanMode="", ex
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setHold: heating: ${h}, cooling: ${c} with result ${result}", 3, child)
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result
 }
 
@@ -2080,6 +2092,7 @@ def setMode(child, mode, deviceId) {
     	LOG("Unable to set new mode (${mode})", 1, child, "warn")
     }
 
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
 	return result
 }
 
@@ -2131,6 +2144,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode: heating: ${h}, cooling: ${c} with result ${result}", 3, child)
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result    
 }
 
@@ -2173,6 +2187,7 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
 	def result = sendJson(child, jsonRequestBody)	
     LOG("setProgram with result ${result}", 3, child)
     dirtyPollData()
+	if (canSchedule()) runIn( 5, poll, [overwrite: true])
     return result
 }
 
@@ -2542,6 +2557,25 @@ private getHVACMode(child) {
 	}
     def hvacMode = atomicState.settings[index].hvacMode		// FIXME
 	LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
+	return hvacMode
+}
+
+private getThermostatHoldType(child) {
+	LOG("Looking up current hvacMode for ${child}", 4, child)
+    def devId = getChildThermostatDeviceIdsString(child)
+    LOG("getThermostatHoldType() Looking for ecobee thermostat ${devId}", 5, child, "trace")
+    
+	def index = -1
+	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
+		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
+	}
+	
+	if (index < 0) {
+		LOG("getthermostatHoldType() Ooops! - can't find thermostat!!!", 3, child, "error")
+		index = 0
+	}
+    def hvacMode = atomicState.settings[index].thermostatHold		// FIXME
+	LOG("getThermostatHoldType() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
 	return hvacMode
 }
 
