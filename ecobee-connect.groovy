@@ -1315,6 +1315,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 	boolean forcePoll = atomicState.forcePoll		// lightweight way to use atomicStates that we don't want to change under us
     boolean thermostatUpdated = atomicState.thermostatUpdated
     boolean runtimeUpdated = atomicState.runtimeUpdated
+    boolean getWeather = atomicState.getWeather
 	boolean somethingChanged
 
 	// forcePoll = true
@@ -1337,7 +1338,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
     // Let's only check those thermostats that actually changed...unless this is a forcePoll - or if we are getting the weather 
     // (we need to get weather for all therms at the same time, because we only update every 15 minutes and use the cached version
     // the rest of the time)
-    String checkTherms = (forcePoll) ? thermostatIdsString : atomicState.changedThermostatIds
+    String checkTherms = (forcePoll || (runtimeUpdated && getWeather)) ? thermostatIdsString : atomicState.changedThermostatIds
     checkTherms = (checkTherms) ? checkTherms : thermostatIdsString
 	LOG("pollEcobeeAPI() - checking thermostats ${checkTherms}", 3)
     
@@ -1355,7 +1356,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 			jsonRequestBody += ',"includeSensors":"true"'
 			gw = ' & sensors'
 		}
-        if (forcePoll || atomicState.getWeather) {
+        if (forcePoll || getWeather) {
         	jsonRequestBody += ',"includeWeather":"true"'		// time to get the weather report (only changes every 15 minutes or so - watchdog sets this when it runs)
             gw += ' & weather'
         }
@@ -1459,9 +1460,9 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 
 				result = true
                 atomicState.lastRevisions = atomicState.latestRevisions
-                atomicState.runtimeUpdated = false
-                atomicState.thermostatUpdated = false
-                atomicState.getWeather = false
+                if (runtimeUpdated) atomicState.runtimeUpdated = false
+                if (thermostatUpdated) atomicState.thermostatUpdated = false
+                if (runtimeUpdated && getWeather) atomicState.getWeather = false
                 
                 if (apiConnected() != "full") {
 					apiRestored()
