@@ -1596,7 +1596,7 @@ def updateSensorData() {
                 		sensorData << [ motion: occupancy ]
                 	}
 					sensorCollector[sensorDNI] = [data:sensorData]
-                    LOG("sensorCollector being updated with sensorData: ${sensorData}", 3)
+                    LOG("sensorCollector being updated with sensorData: ${sensorData}", 4)
 				} // end thermostat else if
 			} // End it.each loop
 		} // End remoteSensors.each loop
