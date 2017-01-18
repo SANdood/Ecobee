@@ -641,25 +641,28 @@ Map getEcobeeSensors() {
 	getEcobeeThermostats()
 	
 	atomicState.thermostatData.thermostatList.each { singleStat ->
-		LOG("thermostat loop: singleStat.identifier == ${singleStat.identifier} -- singleStat.remoteSensors == ${singleStat.remoteSensors} ", 4)
-        
-    	if (!settings.thermostats.findAll{ it.contains(singleStat.identifier) } ) {
+        def tid = singleStat.identifier
+		LOG("thermostat loop: singleStat.identifier == ${tid} -- singleStat.remoteSensors == ${singleStat.remoteSensors} ", 4)   
+        def tempSensors = atomicState.remoteSensors
+    	if (!settings.thermostats.findAll{ it.contains(tid) } ) {
         	// We can skip this thermostat as it was not selected by the user
-            LOG("getEcobeeSensors() --> Skipping this thermostat: ${singleStat.identifier}", 5)
+            LOG("getEcobeeSensors() --> Skipping this thermostat: ${tid}", 5)
         } else {
         	LOG("getEcobeeSensors() --> Entering the else... we found a match. singleStat == ${singleStat.name}", 4)
                         
-        	atomicState.remoteSensors = atomicState.remoteSensors ? (atomicState.remoteSensors + singleStat.remoteSensors) : singleStat.remoteSensors
+        	// atomicState.remoteSensors[tid] = atomicState.remoteSensors[tid] ? (atomicState.remoteSensors[tid] + singleStat.remoteSensors) : singleStat.remoteSensors
+            tempSensors[tid] = tempSensors[tid] ? tempSensors[tid] + singleStat.remoteSensors : singleStat.remoteSensors
             LOG("After atomicState.remoteSensors setup...", 5)	        
                         
             LOG("getEcobeeSensors() - singleStat.remoteSensors: ${singleStat.remoteSensors}", 4)
             LOG("getEcobeeSensors() - atomicState.remoteSensors: ${atomicState.remoteSensors}", 4)
 		}
+        atomicState.remoteSensors = tempSensors
         
 		// WORKAROUND: Iterate over remoteSensors list and add in the thermostat DNI
 		// 		 This is needed to work around the dynamic enum "bug" which prevents proper deletion
         LOG("remoteSensors all before each loop: ${atomicState.remoteSensors}", 5, null, "trace")
-		atomicState.remoteSensors.each {
+		atomicState.remoteSensors[tid].each {
         	LOG("Looping through each remoteSensor. Current remoteSensor: ${it}", 5, null, "trace")
 			if (it.type == "ecobee3_remote_sensor") {
             	LOG("Adding an ecobee3_remote_sensor: ${it}", 4, null, "trace")
@@ -668,20 +671,19 @@ Map getEcobeeSensors() {
 				sensorMap["${key}"] = value
 			} else if ( (it.type == "thermostat") && (settings.showThermsAsSensor == true) ) {            	
 				LOG("Adding a Thermostat as a Sensor: ${it}", 4, null, "trace")
-                def value = "${it?.name}"
+           	    def value = "${it?.name}"
 				def key = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
-                LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
+       	       	LOG("Adding a Thermostat as a Sensor: ${it}, key: ${key}  value: ${value}", 4, null, "trace")
 				sensorMap["${key}"] = value + " (Thermostat)"
-            } else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
-            	// We can add this one as it supports temperature
-                LOG("Adding a control_sensor: ${it}", 4, null, "trace")
+       	   	} else if ( it.type == "control_sensor" && it.capability[0]?.type == "temperature") {
+       	   		// We can add this one as it supports temperature
+       	      	LOG("Adding a control_sensor: ${it}", 4, null, "trace")
 				def value = "${it?.name}"
 				def key = "control_sensor-"+ it?.id
-				sensorMap["${key}"] = value
-            
-            } else {
-            	LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
-            }
+				sensorMap["${key}"] = value    
+           	} else {
+           		LOG("Did NOT add: ${it}. settings.showThermsAsSensor=${settings.showThermsAsSensor}", 4, null, "trace")
+           	}
 		}
 	} // end thermostats.each loop
 	
@@ -1406,7 +1408,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     }
  					if (forcePoll || runtimeUpdated) {
  						if (stat.runtime) tempRuntime[tid] = stat.runtime
-                        //if (stat.remoteSensors) tempSensors /*[tid]*/ = stat.remoteSensors // should be blank unless we requested it specifically
+                        if (stat.remoteSensors) tempSensors[tid] = stat.remoteSensors // should be blank unless we requested it specifically
                         if (stat.weather) tempWeather[tid] = stat.weather
                         tempEquipStat[tid] = stat.equipmentStatus // always store ("" is a valid return value)
                     }
@@ -1432,11 +1434,11 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     	if (tempRuntime.size() != numTherms) tempRuntime = atomicState.runtime + tempRuntime // get less than all, just add to the table
                     	atomicState.runtime = tempRuntime
                     }
-                    //if (tempSensors != [:]) {
-                    //	if (tempSensors.size() != numTherms) tempSensors = atomicState.remoteSensors + tempSensors // get less than all, just add to the table
-                    //	atomicState.remoteSensors = tempSensors
-                    //}
-                    if (resp.data.thermostatList.remoteSensors) atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
+                    if (tempSensors != [:]) {
+                    	if (tempSensors.size() != numTherms) tempSensors = atomicState.remoteSensors + tempSensors // get less than all, just add to the table
+                    	atomicState.remoteSensors = tempSensors
+                    }
+                    //if (resp.data.thermostatList.remoteSensors) atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
                     
                     if (tempWeather != [:]) {
                     	if (tempWeather.size() != numTherms) tempWeather = atomicState.weather + tempWeather // get less than all, just add to the table
@@ -1538,69 +1540,66 @@ def updateSensorData() {
 	LOG("Entered updateSensorData() ${atomicState.remoteSensors}", 5)
  	def sensorCollector = [:]
     
-    // log.debug "updateSensorData() - atomic ${atomicState.remoteSensors}"
-	atomicState.remoteSensors.each { /* tstat ->
-    log.debug "updateSensorData() tstat ${tstat}"
-    	tstat.each { it -> */
-        //log.debug "updateSensorData() it ${it}"
-			it.each {
-				if ( ( it.type == "ecobee3_remote_sensor" ) || (it.type == "control_sensor") || ((it.type == "thermostat") && (settings.showThermsAsSensor)) ) {
-					// Add this sensor to the list
-					def sensorDNI 
-                	if (it.type == "ecobee3_remote_sensor") { 
-                		sensorDNI = "ecobee_sensor-" + it?.id + "-" + it?.code 
-					} else if (it.type == "control_sensor") {
-                		LOG("We have a Smart SI style control_sensor! it=${it}", 4, null, "trace")
-                    	sensorDNI = "control_sensor-" + it?.id 
-                	} else { 
-                		LOG("We have a Thermostat based Sensor! it=${it}", 4, null, "trace")
-                		sensorDNI = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
-					}
-					LOG("sensorDNI == ${sensorDNI}", 4)
+    atomicState.thermostatData.thermostatList.each { singleStat ->
+    	def tid = singleStat.identifier
+    
+		atomicState.remoteSensors[tid].each { 
+			if ( ( it.type == "ecobee3_remote_sensor" ) || (it.type == "control_sensor") || ((it.type == "thermostat") && (settings.showThermsAsSensor)) ) {
+				// Add this sensor to the list
+				def sensorDNI 
+               	if (it.type == "ecobee3_remote_sensor") { 
+               		sensorDNI = "ecobee_sensor-" + it?.id + "-" + it?.code 
+				} else if (it.type == "control_sensor") {
+               		LOG("We have a Smart SI style control_sensor! it=${sensor}", 4, null, "trace")
+                   	sensorDNI = "control_sensor-" + it?.id 
+               	} else { 
+               		LOG("We have a Thermostat based Sensor! it=${sensor}", 4, null, "trace")
+               		sensorDNI = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
+				}
+				LOG("sensorDNI == ${sensorDNI}", 4)
             	                
-					def temperature = ""
-					def occupancy = ""
+				def temperature = ""
+				def occupancy = ""
                             
-					it.capability.each { cap ->
-						if (cap.type == "temperature") {
-                    		LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
-                        	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
-								temperature = cap.value as Double
-								temperature = (temperature / 10).toDouble().round(settings.tempDecimals.toInteger()) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
-                        	} else if (cap.value == "unknown") {
-                        		// TODO: Do something here to mark the sensor as offline?
-                            	LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
-                            	// Need to mark as offline somehow
-                            	temperature = "unknown"   
-                        	} else {
-                        		LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned ${cap.value}.", 1, null, "error")
-                        	}
-						} else if (cap.type == "occupancy") {
-							if(cap.value == "true") {
-								occupancy = "active"
-                            } else if (cap.value == "unknown") {
-                        		// Need to mark as offline somehow
-                            	LOG("Setting sensor occupancy to unknown", 2, null, "warn")
-                            	occupancy = "unknown"
-                        	} else {
-								occupancy = "inactive"
-							}                            
-						}
+				it.capability.each { cap ->
+					if (cap.type == "temperature") {
+                   		LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
+                       	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
+							temperature = cap.value as Double
+							temperature = (temperature / 10).toDouble().round(settings.tempDecimals.toInteger()) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
+                       	} else if (cap.value == "unknown") {
+                       		// TODO: Do something here to mark the sensor as offline?
+                           	LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
+                           	// Need to mark as offline somehow
+                           	temperature = "unknown"   
+                       	} else {
+                       		LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned ${cap.value}.", 1, null, "error")
+                       	}
+					} else if (cap.type == "occupancy") {
+						if(cap.value == "true") {
+							occupancy = "active"
+						} else if (cap.value == "unknown") {
+                       		// Need to mark as offline somehow
+                           	LOG("Setting sensor occupancy to unknown", 2, null, "warn")
+                           	occupancy = "unknown"
+                       	} else {
+							occupancy = "inactive"
+						}                            
 					}
+				}
                                             				
-					def sensorData = [ decimalPrecision: tempDecimals ]
-					sensorData << [
-						temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", tempDecimals.toInteger()))					
-                    ]
-                	if (occupancy != "") {
-                		sensorData << [ motion: occupancy ]
-                	}
-					sensorCollector[sensorDNI] = [data:sensorData]
-                    LOG("sensorCollector being updated with sensorData: ${sensorData}", 4)
-				} // end thermostat else if
-			} // End it.each loop
-		} // End remoteSensors.each loop
- //   } // end thermostats loop
+				def sensorData = [ decimalPrecision: tempDecimals ]
+				sensorData << [
+					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", tempDecimals.toInteger()))					
+                ]
+               	if (occupancy != "") {
+               		sensorData << [ motion: occupancy ]
+               	}
+				sensorCollector[sensorDNI] = [data:sensorData]
+                LOG("sensorCollector being updated with sensorData: ${sensorData}", 4)
+			} // end sensor type check if
+		} // End [tid] sensors loop
+	} // End thermostats loop
 	atomicState.remoteSensorsData = sensorCollector
 	LOG("updateSensorData(): found these remoteSensors: ${sensorCollector}", 4)                
 }
