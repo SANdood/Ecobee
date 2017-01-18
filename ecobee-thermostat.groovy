@@ -337,7 +337,8 @@ metadata {
             state "Hold: Home", action:"noOp", label: 'Hold: Home', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_home_blue.png"
             state "Hold: Away", action:"noOp", label: 'Hold: Away',  icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_away_blue.png"
             state "Hold: Sleep", action:"noOp", label: 'Hold: Sleep',  icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
-            state "default:", action:"noOp", label: 'Other: ${currentValue}', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
+      		state "Vacation", action: "noOp", label: 'Vacation', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_generic_chair_blue.png" // Need the airplane icon
+      		state "default", action:"noOp", label: 'Other: ${currentValue}', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
             
 		}        
         
