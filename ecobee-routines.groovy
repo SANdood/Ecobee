@@ -220,12 +220,34 @@ def changeProgramHandler(evt) {
     	// First let's change the Thermostat Program
         if(state.doResumeProgram == true) {
         	LOG("Resuming Program for ${stat}", 4, null, "trace")
-        	stat.resumeProgram()
-			sendNotificationEvent("And I resumed normal programming on ${stat}.")
+            if (stat.currentValue("thermostatHold") == 'hold') {
+            	def scheduledProgram = stat.currentValue("scheduledProgram")
+        		stat.resumeProgram()
+				sendNotificationEvent("And I resumed the scheduled ${scheduledProgram} program on ${stat}.")
+            }
         } else {
         	LOG("Setting Thermostat Program to programParam: ${state.programParam} and holdType: ${state.holdTypeParam}", 4, null, "trace")
-        	stat.setThermostatProgram(state.programParam, state.holdTypeParam)
-			sendNotificationEvent("And I set ${stat} to the ${state.programParam} program.")
+            
+            boolean done = false
+            def thermostatHold = stat.currentValue('thermostatHold')
+            if (stat.currentValue("currentProgram") == state.programParam) {
+            	if (thermostatHold == "") {
+                	sendNotificationEvent("And I verified that ${stat} is already in the ${state.program} program.")
+                    done = true
+                }
+            } else if (thermostatHold == "hold") {
+                if (stat.currentValue("scheduledProgram") == state.programParam) {
+                    if (state.programParam == "nextTransition") {
+                    	stat.resumeProgram()	// get back to the scheduled program
+                        sendNotificationEvent("And I resumed the scheduled ${state.program} on ${stat}.")
+                        done = true
+                    }
+                }
+            }
+            if (!done) {    
+        		stat.setThermostatProgram(state.programParam, state.holdTypeParam)
+				sendNotificationEvent("And I set ${stat} to the ${state.programParam} program${(state.holdType!='nextTransition')?' indefinitely':'.'}")
+            }
 		}
         if (state.fanCommand != "" && state.fanCommand != null) stat."${state.fanCommand}"()
     }
