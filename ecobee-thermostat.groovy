@@ -393,7 +393,7 @@ metadata {
 			state "heat 2 hum", /* action:"noOp", label: "heat 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_2+humid.png"
 			state "heat 3 hum", /* action:"noOp", label: "heat 3", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_3+humid.png"
 			state "heat pump 2 hum", /* action:"noOp", label: "heat pump 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_2+humid.png"
-			state "heat pump  hum3", /* action:"noOp", label: "heat pump 3", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_3+humid.png"
+			state "heat pump 3 hum", /* action:"noOp", label: "heat pump 3", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_heat_3+humid.png"
 			state "cool 1 hum", /* action:"noOp", label: "cool 1", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_1-humid.png"
 			state "cool 2 hum", /* action:"noOp", label: "cool 2", */ icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/operatingstate_cool_2-humid.png"
 			state "heating hum", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat+humid.png"
@@ -990,7 +990,7 @@ def generateProgramEvent(program, failedProgram=null) {
 	LOG("Generate generateProgramEvent Event: program ${program}", 4)
 
 	sendEvent("name":"thermostatStatus", "value":"Setpoint updating...", "description":statusText, displayed: false)
-	sendEvent("name":"currentProgramName", "value":program.capitalize())
+	sendEvent("name":"currentProgramName", "value":"Hold: "+program.capitalize())
     sendEvent("name":"currentProgramId", "value":program)
     
     def tileName = ""
