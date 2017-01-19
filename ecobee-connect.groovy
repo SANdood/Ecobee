@@ -1160,7 +1160,7 @@ def pollChildren(child = null) {
     String thermostatsToPoll = getChildThermostatDeviceIdsString()
     if (child == null) { // normal call
    		// Check to see if it is time to do an full poll to the Ecobee servers. If so, execute the API call and update ALL children
-    	timeSinceLastPoll = (atomicState.forcePoll == true) ? 0 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
+    	timeSinceLastPoll = atomicState.forcePoll ? 999.9 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
     	LOG("Time since last poll? ${timeSinceLastPoll} -- atomicState.lastPoll == ${atomicState.lastPoll}", 3, child, "info")
     
     	// Also, check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
@@ -1169,7 +1169,7 @@ def pollChildren(child = null) {
     	atomicState.forcePoll = true	// called by a child - do a forcePoll
     }
     
-    if ( (atomicState.forcePoll == true) || somethingChanged /* || ( timeSinceLastPoll > getMinMinBtwPolls().toDouble() ) */ ) {
+    if (atomicState.forcePoll  || somethingChanged) {
     	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
         LOG("pollChildren() - Getting changes", 3, child)
     	pollEcobeeAPI(thermostatsToPoll)  // This will update the values saved in the state which can then be used to send the updates
@@ -1369,7 +1369,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 	//jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"false","includeEvents":"true"}}'
  	//                 	   {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
     
-	LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 5)
+	LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 3)
  
 	atomicState.forcePoll = false	// it's ok to clear the flag now
     def result = false
@@ -1619,7 +1619,7 @@ def updateThermostatData() {
 		def dni = [ app.id, stat.identifier ].join('.')
         
 		// we use atomicState.thermostatData because it holds the latest Ecobee API response, from which we can determine which stats actually
-        // had updated data. Thus the following work is done ONLE for tstats that have updated data
+        // had updated data. Thus the following work is done ONLY for tstats that have updated data
 		def tid = stat.identifier
 
 		LOG("Updating dni $dni", 4)
@@ -1815,10 +1815,6 @@ def updateThermostatData() {
         	equipOpStat = 'humidifier' 
         } // also: economizer, ventilator, compHotWater, auxHotWater
         */
-        
-        
-        // Other possible values include Humidifier, Dehumidifier, HRV, ERV, etc. but we don't handle these (yet)		
-		
 											
 		// Update the API link state and the lastPoll data. If we aren't running at a high debugLevel >= 4, then supply simple
 		// poll status instead of the date/time (this simplifies the UI presentation, and reduces the chatter in the devices'
