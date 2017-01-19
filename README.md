@@ -43,6 +43,12 @@ This work represents a significant overhaul of the aforemention prior implementa
     * It is now possible to select a 2 minute polling frequency, which is perhaps a happy medium between the Ecobee-recommended 3 minute minimum poll time, and the 1 minute frequency used primarily for debugging.
   * Watchdog Devices: A practical alternative to short polling frequency is now to configure one or more "watchdog" devices. In addition to ensuring that the scheduled polls haven't gotten derailed by the SmartThings infrastructure, an event from, say, a temperature change on a SmartThings MultiSensor will also cause a poll of the ecobee API to check if anything has changed. If not, no foul - the "heavy" API call is avoided.
 
+* <b>Helper SmartApps</b>
+ * Mode/Routines handler: New "smart" changes to thermostat program:
+   * Send a notification to the location's notification log explaining what was done
+   * If current program is already the requested program, and we aren't in a hold, then leave it alone
+   * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply resumeProgram()
+ 
 * <b>Other Miscellaneous Enhancements</b>
   * SmartApp Name: it is now possible to rename each instance of the Ecobee (Connect) SmartApp. This is useful for those with multiple locations/hubs.
   * Contact list support: For those who have enabled SmartThings contact lists, you can now select which users will recieve Push notifications of major issues (e.g., warnings about API connection loss). If the contact list is not enabled, a Push message is sent to all users (as before)
