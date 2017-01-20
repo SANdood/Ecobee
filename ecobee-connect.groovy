@@ -237,7 +237,7 @@ def thermsPage(params) {
         	paragraph "NOTE: The units type (F or C) is determined by your Hub Location settings automatically. Please update your Hub settings (under My Locations) to change the units used. Current value is ${getTemperatureScale()}."
         }
     	section("Select Thermostats") {
-			LOG("thersPage(): atomicState.settingsCurrentTherms=${atomicState.settingsCurrentTherms}   settings.thermostats=${settings.thermostats}", 4, null, "trace")
+			LOG("thermsPage(): atomicState.settingsCurrentTherms=${atomicState.settingsCurrentTherms}   settings.thermostats=${settings.thermostats}", 4, null, "trace")
 			if (atomicState.settingsCurrentTherms != settings.thermostats) {
 				LOG("atomicState.settingsCurrentTherms != settings.thermostats determined!!!", 4, null, "trace")			
 			} else { LOG("atomicState.settingsCurrentTherms == settings.thermostats: No changes detected!", 4, null, "trace") }
@@ -1134,6 +1134,7 @@ def pollInit() {
 
 def pollChildren(child = null) {
 	def results = true   
+    if (child) atomicState.forcePoll = true
     
 	LOG("=====> pollChildren() - atomicState.forcePoll(${atomicState.forcePoll})  atomicState.lastPoll(${atomicState.lastPoll})  now(${now()})  atomicState.lastPollDate(${state.lastPollDate})", 4, child, "trace")
     
@@ -1368,6 +1369,9 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 	jsonRequestBody += '}}'
 	
 	// TODO: Check on any running EVENTs on thermostat	
+	//jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"false","includeEvents":"true"}}'
+ 	//                 	   {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
+    
 	LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 3)
  
 	atomicState.forcePoll = false	// it's ok to clear the flag now
@@ -2072,13 +2076,14 @@ def resumeProgram(child, deviceId) {
         result = result && fanResult      
     }
         
+    // 					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
     def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","resumeAll":"true"}}'
 	LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(jsonRequestBody) && result
     LOG("resumeProgram(child) with result ${result}", 3, child)
 	
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
 
@@ -2091,7 +2096,7 @@ def setHVACMode(child, deviceId, mode) {
     def result = sendJson(child, jsonRequestBody)
     LOG("setHVACMode(child) with result ${result}", 3, child)    
 
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
 
@@ -2104,7 +2109,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(child) with result ${result}", 3, child)    
 
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
 
@@ -2128,11 +2133,13 @@ def setHold(child, heating, cooling, deviceId, sendHoldType=null, fanMode="", ex
 	} else {
     	jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '"}}]}'
     }
+    //      			   {"selection":{"selectionType":"thermostats","selectionMatch":"XXX"},             "functions":[{"type":"setHold","params":{"coolHoldTemp":"730","heatHoldTemp":"510","holdType":"nextTransition"}}],}
+	//def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","includeRuntime":true},"functions": [{ "type": "setHold", "params": { "coolHoldTemp": '+c+',"heatHoldTemp": '+h+', "holdType": '+sendHoldType+' } } ]}'
     LOG("about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setHold: heating: ${h}, cooling: ${c} with result ${result}", 3, child)
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
 
@@ -2151,7 +2158,7 @@ def setMode(child, mode, deviceId) {
     	LOG("Unable to set new mode (${mode})", 1, child, "warn")
     }
 
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
 	return result
 }
 
@@ -2203,7 +2210,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
     
 	def result = sendJson(child, jsonRequestBody)
     LOG("setFanMode: heating: ${h}, cooling: ${c} with result ${result}", 3, child)
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result    
 }
 
@@ -2211,19 +2218,7 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
 	// NOTE: Will use only the first program if there are two with the same exact name
 	LOG("setProgram() to ${program} with DeviceID: ${deviceId}", 3, child, "debug")    
     // def climateRef = program.toLowerCase()   
-    
-	// def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == deviceId.toString() }
-	
-/*	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
-		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == deviceId.toString()) index = i
-	}
-	
-	if (index < 0) {
-		LOG("setProgram() Ooops! - can't find thermostat!!!", 3, child, "error")
-		return false
-	}
-*/	
+    	
     def climates = atomicState.program[deviceId.toString()].climates
     def climate = climates?.find { it.name.toString() == program.toString() }
     LOG("climates - {$climates}", 5, child)
@@ -2246,7 +2241,7 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
 	def result = sendJson(child, jsonRequestBody)	
     LOG("setProgram with result ${result}", 3, child)
     dirtyPollData()
-	if (canSchedule()) runIn( 5, poll, [overwrite: true])
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
 
@@ -2422,6 +2417,8 @@ private def sendActivityFeeds(notificationMessage) {
     }
 }
 
+
+
 // Helper Functions
 // Creating my own as it seems that the built-in version only works for a device, NOT a SmartApp
 def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
@@ -2552,7 +2549,6 @@ private def apiLost(where = "[where not specified]") {
         	LOG("apiLost() - notifying each child: ${oneChild} of loss", 0, child, "error")
 		}
     }
-    
     unschedule("pollScheduled")
     unschedule("scheduleWatchdog")
     runEvery3Hours("notifyApiLost")
@@ -2579,32 +2575,31 @@ private String childType(child) {
 
 private getFanMinOnTime(child) {
 	LOG("getFanMinOnTime() - Looking up current fanMinOnTime for ${child}", 4, child)
-    def devId = getChildThermostatDeviceIdsString(child)
+    String devId = getChildThermostatDeviceIdsString(child)
     LOG("getFanMinOnTime() Looking for ecobee thermostat ${devId}", 5, child, "trace")
     
-
-    def fanMinOnTime = atomicState.settings[devId.toString()].fanMinOnTime
-    LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
+    def fanMinOnTime = atomicState.settings[devId].fanMinOnTime
+    LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${devId}", 4, child)
 	return fanMinOnTime
 }
 
 private getHVACMode(child) {
 	LOG("Looking up current hvacMode for ${child}", 4, child)
-    def devId = getChildThermostatDeviceIdsString(child)
+    String devId = getChildThermostatDeviceIdsString(child)
     LOG("getHVACMode() Looking for ecobee thermostat ${devId}", 5, child, "trace")
     
-    def hvacMode = atomicState.settings[devId.toString()].hvacMode		// FIXME
-	LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
+    def hvacMode = atomicState.settings[devId].hvacMode		// FIXME
+	LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${devId}", 4, child)
 	return hvacMode
 }
 
 def getAvailablePrograms(thermostat) {
 	// TODO: Finish implementing this!
     LOG("Looking up the available Programs for this thermostat (${thermostat})", 4)
-    def devId = getChildThermostatDeviceIdsString(thermostat)
+    String devId = getChildThermostatDeviceIdsString(thermostat)
     LOG("getAvailablePrograms() Looking for ecobee thermostat ${devId}", 5, thermostat, "trace")
-    
-    def climates = atomicState.program[devId.toString()].climates
+
+    def climates = atomicState.program[devId].climates
     
     return climates?.collect { it.name }
 }
