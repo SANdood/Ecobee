@@ -1,6 +1,7 @@
 /**
  *  Based on original version Copyright 2015 SmartThings
  *  Additions Copyright 2016 Sean Kendall Schneyer
+ *  Additions Copyright 2017 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -24,10 +25,11 @@
  *
  * 	0.9.12 - Fix for setting custom Thermostat Programs (Comfort Settings)
  *	0.9.13 - Add attributes to indicate custom program names to child thermostats (smart1, smart2, etc)
+ * 	0.10.1 - Massive overhaul for performance, efficiency, improved UI, enhanced functionality
  *
  */
 
-def getVersionNum() { return "0.9.13" }
+def getVersionNum() { return "0.10.1" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
