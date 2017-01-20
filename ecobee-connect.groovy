@@ -1809,12 +1809,11 @@ def updateThermostatData() {
 			if 		(equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
 			else if (equipStatus.contains('ool2')) { equipOpStat = 'cool 2' }
 			if (equipStatus.contains('dehum')) { equipOpStat += ' hum' }	// dehumidifying if cool
-		} /* else if (equipStatus.contains('dehumid')) { // These can also run independent of heat/cool
+		} else if (equipStatus.contains('dehumid')) { // These can also run independent of heat/cool
         	equipOpStat = 'dehumidifier' 
-        } else if (equipStatus.contains('humid') { 
+        } else if (equipStatus.contains('humid')) { 
         	equipOpStat = 'humidifier' 
         } // also: economizer, ventilator, compHotWater, auxHotWater
-        */
 											
 		// Update the API link state and the lastPoll data. If we aren't running at a high debugLevel >= 4, then supply simple
 		// poll status instead of the date/time (this simplifies the UI presentation, and reduces the chatter in the devices'
