@@ -946,7 +946,6 @@ def setThermostatProgram(program, holdType=null) {
   
     if ( parent.setProgram(this, program, deviceId, sendHoldType) ) {
 		generateProgramEvent(program)
-        runIn(15, "poll")        
 	} else {
     	LOG("Error setting new comfort setting ${program}.", 2, null, "warn")
 		def priorProgram = device.currentState("currentProgramId")?.value
