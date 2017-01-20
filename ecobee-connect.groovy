@@ -1,6 +1,7 @@
 /**
  *  Based on original code Copyright 2015 SmartThings
  *	Additional changes Copyright 2016 Sean Kendall Schneyer
+ *  Additional changes Copyright 2017 Barry A. Burke
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -21,6 +22,7 @@
  *      JLH - 02-15-2014 - Fuller use of ecobee API
  *      10-28-2015 DVCSMP-604 - accessory sensor, DVCSMP-1174, DVCSMP-1111 - not respond to routines
  *      StrykerSKS - 12-11-2015 - Make it work (better) with the Ecobee 3
+ *		BAB - 01-20-2017 - Massive overhaul for efficiency, performance, bug fixes and UI enhancements
  *
  *  See Changelog for change history
  *
@@ -29,7 +31,7 @@
  *  0.9.20 - Allow installations where no "location" is set. Useful for virtual hubs and testing
  *
  */  
-def getVersionNum() { return "0.9.20" }
+def getVersionNum() { return "0.10.1" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1366,9 +1368,6 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 	jsonRequestBody += '}}'
 	
 	// TODO: Check on any running EVENTs on thermostat	
-	//jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + thermostatIdsString + '","includeExtendedRuntime":"false","includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeWeather":"true","includeProgram":"true","includeAlerts":"false","includeEvents":"true"}}'
- 	//                 	   {"selection":{"selectionType":"thermostats","selectionMatch":"XXX,YYY",                                                     "includeSettings":"true","includeRuntime":"true","includeEquipmentStatus":"true","includeSensors":"true","includeProgram":"true","includeWeather":"true","includeAlerts":"true","includeEvents":"true"}}
-    
 	LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 3)
  
 	atomicState.forcePoll = false	// it's ok to clear the flag now
@@ -2073,7 +2072,6 @@ def resumeProgram(child, deviceId) {
         result = result && fanResult      
     }
         
-    // 					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
     def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","resumeAll":"true"}}'
 	LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
@@ -2130,8 +2128,6 @@ def setHold(child, heating, cooling, deviceId, sendHoldType=null, fanMode="", ex
 	} else {
     	jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '"}}]}'
     }
-    //      			   {"selection":{"selectionType":"thermostats","selectionMatch":"XXX"},             "functions":[{"type":"setHold","params":{"coolHoldTemp":"730","heatHoldTemp":"510","holdType":"nextTransition"}}],}
-	//def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","includeRuntime":true},"functions": [{ "type": "setHold", "params": { "coolHoldTemp": '+c+',"heatHoldTemp": '+h+', "holdType": '+sendHoldType+' } } ]}'
     LOG("about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
     
 	def result = sendJson(child, jsonRequestBody)
@@ -2426,8 +2422,6 @@ private def sendActivityFeeds(notificationMessage) {
     }
 }
 
-
-
 // Helper Functions
 // Creating my own as it seems that the built-in version only works for a device, NOT a SmartApp
 def myConvertTemperatureIfNeeded(scaledSensorValue, cmdScale, precision) {
@@ -2588,17 +2582,7 @@ private getFanMinOnTime(child) {
     def devId = getChildThermostatDeviceIdsString(child)
     LOG("getFanMinOnTime() Looking for ecobee thermostat ${devId}", 5, child, "trace")
     
-/*    // def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
-	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
-		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
-	}
-	
-	if (index < 0) {
-		LOG("getFanMinOnTime() Ooops! - can't find thermostat!!!", 3, child, "error")
-		index = 0
-	}
-*/
+
     def fanMinOnTime = atomicState.settings[devId.toString()].fanMinOnTime
     LOG("getFanMinOnTime() fanMinOnTime is ${fanMinOnTime} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
 	return fanMinOnTime
@@ -2609,43 +2593,10 @@ private getHVACMode(child) {
     def devId = getChildThermostatDeviceIdsString(child)
     LOG("getHVACMode() Looking for ecobee thermostat ${devId}", 5, child, "trace")
     
-/*    //def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
-	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
-		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
-	}
-	
-	if (index < 0) {
-		LOG("getHVACMode() Ooops! - can't find thermostat!!!", 3, child, "error")
-		index = 0
-	}
-    */
     def hvacMode = atomicState.settings[devId.toString()].hvacMode		// FIXME
 	LOG("getHVACMode() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
 	return hvacMode
 }
-
-/*
-private getThermostatHoldType(child) {
-	LOG("Looking up current hold Type for ${child}", 4, child)
-    def devId = getChildThermostatDeviceIdsString(child)
-    LOG("getThermostatHoldType() Looking for ecobee thermostat ${devId}", 5, child, "trace")
-    
-	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
-		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
-	}
-	
-	if (index < 0) {
-		LOG("getthermostatHoldType() Ooops! - can't find thermostat!!!", 3, child, "error")
-		index = 0
-	}
-
-    def holdMode = atomicState.settings[devId.toString()].thermostatHold		// FIXME
-	LOG("getThermostatHoldType() hvacMode is ${hvacMode} for therm ${atomicState.thermostatData.thermostatList[index].identifier}", 4, child)
-	return hvacMode
-}
-*/
 
 def getAvailablePrograms(thermostat) {
 	// TODO: Finish implementing this!
@@ -2653,17 +2604,6 @@ def getAvailablePrograms(thermostat) {
     def devId = getChildThermostatDeviceIdsString(thermostat)
     LOG("getAvailablePrograms() Looking for ecobee thermostat ${devId}", 5, thermostat, "trace")
     
-/*    // def therm = atomicState.thermostatData?.thermostatList?.find { it.identifier.toString() == devId.toString() }
-	def index = -1
-	for (i in 0..atomicState.thermostatData.thermostatList.size() - 1) {
-		if (atomicState.thermostatData.thermostatList[i].identifier.toString() == devId.toString()) index = i
-	}
-	
-	if (index < 0) {
-		LOG("getAvailablePrograms() Ooops! - can't find thermostat!!!", 3, child, "error")
-		index = 0
-	}
- */
     def climates = atomicState.program[devId.toString()].climates
     
     return climates?.collect { it.name }
