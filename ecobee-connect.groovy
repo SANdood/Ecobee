@@ -1374,7 +1374,6 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
     
 	LOG("pollEcobeeAPI() - jsonRequestBody is: ${jsonRequestBody}", 3)
  
-	atomicState.forcePoll = false	// it's ok to clear the flag now
     def result = false
 	
 	def pollParams = [
@@ -1463,6 +1462,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 
 				result = true
                 atomicState.lastRevisions = atomicState.latestRevisions
+               	if (forcePoll) atomicState.forcePoll = false	// it's ok to clear the flag now
                 if (runtimeUpdated) atomicState.runtimeUpdated = false
                 if (thermostatUpdated) atomicState.thermostatUpdated = false
                 if (runtimeUpdated && getWeather) atomicState.getWeather = false
@@ -1689,7 +1689,7 @@ def updateThermostatData() {
 			
 			// calculate these anyway (for now) - it's easier to read the range while debugging
 			if (heatLow && heatHigh) heatRange = "(${Math.round(heatLow)}..${Math.round(heatHigh)})"
-			if (coolLow && coolHigh) coolRange = "(${Math.round(coolLow)}..${Math.round(heatHigh)})"
+			if (coolLow && coolHigh) coolRange = "(${Math.round(coolLow)}..${Math.round(coolHigh)})"
 			
 			// EQUIPMENT SPECIFICS
 			hasHeatPump = atomicState.settings[tid].hasHeatPump
@@ -1707,12 +1707,15 @@ def updateThermostatData() {
 		def currentClimateId = ""
         def currentClimate = ""
         def currentFanMode = ""
+        def statMode = atomicState.settings[tid].hvacMode
 		
 		// what program is supposed to be running now?
 		def scheduledClimateId = atomicState.program[tid].currentClimateRef
 		def scheduledClimateName = ""
+        def schedClimateRef
 		if (scheduledClimateId) { 
-            	scheduledClimateName = (atomicState.program[tid].climates.find { it.climateRef == scheduledClimateId }).name
+        		schedClimateRef = atomicState.program[tid].climates.find { it.climateRef == scheduledClimateId }
+            	scheduledClimateName = schedClimateRef.name
 		}
 		LOG( "scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}", 4)
 		// check which program is actually running now
@@ -1723,13 +1726,29 @@ def updateThermostatData() {
             }        	
 		}
 		def thermostatHold = ""
+        def holdEndsAt = ""
         if (runningEvent) {
 			thermostatHold = runningEvent.type
             LOG("Found a running Event: ${runningEvent}", 3) 
             def tempClimateRef = runningEvent.holdClimateRef ?: ""
         	if ( runningEvent.type == "hold" ) {
-				currentClimate = (tempClimateRef ? (atomicState.program[tid].climates.find { it.climateRef == tempClimateRef }).name : "")
-               	currentClimateName = "Hold: " + currentClimate
+            	if (tempClimateRef != "") {
+					currentClimate = (tempClimateRef ? (atomicState.program[tid].climates.find { it.climateRef == tempClimateRef }).name : "")
+               		currentClimateName = "Hold: " + currentClimate
+                    if (runningEvent.endTime) holdEndsAt = runningEvent.endTime.take(5) // (##:##:## --> ##:##)
+                } else {									// Not running a program, are we holding for something else?
+                	log.debug "runningEvent: ${runningEvent}"
+                	if (runningEvent.name == "auto") {		// Handle the "auto" climates (includes fan on override, and maybe the Smart Recovery?)
+                    	if ((statMode == "heat") && (runningEvent.fan != schedClimateRef.heatFan)) {
+                        	currentClimateName = "Hold: Fan"
+                        } else if ((statMode == "cool") && (runningEvent.fan != schedClimateRef.coolFan)) {
+                        	currentClimateName = "Hold: Fan"
+                        } else {
+                        	currentClimateName = "Auto"
+                        }
+                        if (runningEvent.endTime) holdEndsAt = runningEvent.endTime.take(5) // (##:##:## --> ##:##)
+                    }
+                }  // if we can't tell which hold is in effect, leave currentClimate, currentClimateName and currentClimateId blank/null/empty
 			} else if (runningEvent.type == "vacation" ) {
                	currentClimateName = "Vacation"
             } else if (runningEvent.type == "quickSave" ) {
@@ -1768,7 +1787,6 @@ def updateThermostatData() {
         def dehumidity = atomicState.runtime[tid].desiredDehumidity
         def hasHumidifier = atomicState.settings[tid].hasHumidifier
         def hasDehumidifier = atomicState.settings[tid].hasDehumidifier || atomicState.settings[tid].dehumidifyWithAC // we can hide the details from the device handler
-        def statMode = atomicState.settings[tid].hvacMode
 		
 		switch (statMode) {
 			case 'heat':
@@ -1842,6 +1860,7 @@ def updateThermostatData() {
             	heatStages: heatStages,
 				autoMode: atomicState.settings[tid].autoHeatCoolFeatureEnabled,
                 thermostatMode: statMode,
+                holdEndsAt: holdEndsAt,
             	heatRangeHigh: heatHigh,
             	heatRangeLow: heatLow,
             	coolRangeHigh: coolHigh,
@@ -1881,7 +1900,7 @@ def updateThermostatData() {
 				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
 			]
 		}
-		LOG("Event Data (${tid}) = ${data}", 4)
+		LOG("Event Data (${tid}) = ${data}", 3)
 
 		collector[dni] = [thermostatId:tid, data:data /*,climateData:climateData */]
 		// i++
