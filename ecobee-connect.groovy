@@ -29,9 +29,11 @@
  * 	0.9.18 - Fix customer Program handling
  *	0.9.19 - Add attributes to indicate custom program names to child thermostats (smart1, smart2, etc)
  *  0.9.20 - Allow installations where no "location" is set. Useful for virtual hubs and testing
+ *	10.1.1 - Massive overhaul (see https://github.com/SANdood/Ecobee)
+ *	10.1.2 - Added Smart Zone helper app
  *
  */  
-def getVersionNum() { return "0.10.1" }
+def getVersionNum() { return "0.10.2" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -40,7 +42,10 @@ private def getHelperSmartApps() {
                 title: "Create new Routines Handler..."], 
 			[name: "ecobeeContactsChild", appName: "ecobee Open Contacts",  
             	namespace: "smartthings", multiple: true, 
-                title: "Create new Open Contacts SmartApp..."]                 
+                title: "Create new Open Contacts SmartApp..."],   
+			[name: "ecobeeZonesChild", appName: "ecobee Smart Zones",
+			 	namespace: "smartthings", multiple: true,
+			 	title: "Create new Smart Zone Handler..."]
 			]
 }
  
