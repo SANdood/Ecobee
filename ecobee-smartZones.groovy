@@ -18,10 +18,7 @@ def getVersionNum() { return "0.1.0" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
 /*
- *
- * 0.1.5 - SendNotificationMessage so that the action shows up in Notification log after the mode/routine notices
- * 0.1.4 - Fix Custom Mode Handling
- *
+
  */
 
 definition(
@@ -58,7 +55,7 @@ def mainPage() {
             input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.Thermostat", required: true, multiple: true, submitOnChange: true)
 		}
 		
-		section(title: "Fan Only" {}
+		// section(title: "Fan Only" ){}
         
 		section(title: "Temporarily Disable?") {
         	input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
@@ -86,23 +83,50 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-	subscribe( masterThermostat, "thermostat.thermostatOperatingState", masterStateHandler)
-    LOG("initialize() complete")
+	
+	// Get slaves into a known state
+	slaveThermostats.each { stat ->
+		stat.resumeProgram()
+		state."${stat.displayName}-fanOn" = false
+	}
+	
+	// check the master, but give it a few seconds first
+	runIn (5, "masterFanStateHandler", [overwrite: true])
+	
+	// and finally, subscribe to thermostatOperatingState changes
+	subscribe( masterThermostat, "thermostatOperatingState", masterFanStateHandler)
+    LOG("initialize() complete", 3)
 }
 
-def masterStateHandler(evt) {
-	LOG("masterStateHander() entered with evt: ${evt}", 5)
+def masterFanStateHandler(evt=null) {
+	LOG("masterFanStateHander() entered with evt: ${evt}", 5)
 	
-	switch (evt.value) {
-		case 'idle':
-			// master just changed to idle, turn off slave fans (but only if we turned them on)
-			break;
+	def masterOperatingState = evt ? evt.value : masterThermostat.currentThermostatOperatingState
+	LOG("masterFanStateHandler() master thermostatOperatingState = ${masterOperatingState}", 3)
+	
+	switch (masterOperatingState) {
 		case 'fan only':
 			// master just changed to fan-only, turn on fan for any slaves not already running their fan
+			slaveThermostats.each { stat ->
+				if (stat.currentThermostatOperatingState == 'idle') {
+					stat.setThermostatFanMode('on', 'nextTransition')
+					state."${stat.displayName}-fanOn" = true
+					LOG("masterFanStateHandler() turned ${stat.displayName} fan ON", 3)
+				}
+			}
 			break;
+		case 'idle':
 		case 'heating':
 		case 'cooling':
 			// master just started heating/cooling, turn off slave fans (if we turned them on)
+			slaveThermostats.each { stat->
+				if (state."${stat.displayName}-fanOn") {
+					stat.resumeProgram()			// don't just turn the fan OFF, because that will just create another hold event
+					state."${stat.displayName}-fanOn" = false
+                    LOG("masterFanStateHandler() turned ${stat.displayName} fan OFF", 3)
+				}
+			}
+			break;
 		default:
 			break;
 	}
