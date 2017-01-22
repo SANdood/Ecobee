@@ -2071,9 +2071,10 @@ private refreshAuthToken(child=null) {
     }
 }
 
-def resumeProgram(child, deviceId) {
+def resumeProgram(child, String deviceId, resumeAll=true) {
 	LOG("Entered resumeProgram for deviceID: ${deviceID}", 5, child)
 	def result = true
+	String allStr = resumeAll ? 'true' : 'false'
     
     def previousFanMinOnTime = atomicState."previousFanMinOnTime${deviceId}"
     def currentFanMinOnTime = getFanMinOnTime(child)
@@ -2101,7 +2102,7 @@ def resumeProgram(child, deviceId) {
     }
         
     // 					   {"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"YYY"}}
-    def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","resumeAll":"true"}}'
+    def jsonRequestBody = '{"functions":[{"type":"resumeProgram"}],"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '","resumeAll":"' + allStr + '"}}'
 	LOG("jsonRequestBody = ${jsonRequestBody}", 4, child)
     
 	result = sendJson(jsonRequestBody) && result
