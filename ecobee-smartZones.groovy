@@ -112,7 +112,7 @@ def masterFanStateHandler(evt=null) {
 					stat.setThermostatFanMode('on', 'nextTransition')
 					state."${stat.displayName}-fanOn" = true
 					LOG("masterFanStateHandler() turned ${stat.displayName} fan ON", 3)
-				}
+				} 
 			}
 			break;
 		case 'idle':
@@ -121,13 +121,16 @@ def masterFanStateHandler(evt=null) {
 			// master just started heating/cooling, turn off slave fans (if we turned them on)
 			slaveThermostats.each { stat->
 				if (state."${stat.displayName}-fanOn") {
-					stat.resumeProgram()			// don't just turn the fan OFF, because that will just create another hold event
+					if (stat.currentValue("currentProgramName") == "Hold: Fan") {
+						stat.resumeProgram(false)	// just pop this hold off the stack, which will return the fan to prior mode (auto/circulate)
+					} // else { another Program overrode our Fan hold, let them clean up the hold stack}
 					state."${stat.displayName}-fanOn" = false
-                    LOG("masterFanStateHandler() turned ${stat.displayName} fan OFF", 3)
+                    LOG("masterFanStateHandler() returned ${stat.displayName} to prior fan mode", 3)
 				}
 			}
 			break;
 		default:
+        	// we ignore the other possible OperatingStates (e.g., 'pendhing heat', etc.)
 			break;
 	}
 }
