@@ -22,9 +22,7 @@ This work represents a significant overhaul of the aforemention prior implementa
     * Only data from the changed object(s) is sent. While this is likely to include some individual data elements that have not changed, it does significantly reduce the amount of work the SmartApp and device driver has to do for each update;
 
     * If debugLevel is set to 3 or lower in the SmartApp, the "Last Poll" date and time is not sent; instead the thermostat devices' UI will show polling status as Succeeded/Incomplete/Failed. Changing the debugLevel in the SmartApp will dynamically cause the child thermostat(s) to begin displaying date of last poll;
-  
-* <b>New Smart Zone helper app</b>
- * Smart Zone attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC fan isn't run independently for each zone (thereby reducing electricity demand). Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). When the master switches to 'idle', 'heat' or 'cool', the slave program is resumed. (still needs logic to return the slave zone to it's previously running program, if any).
+
 * <b>User Interface Enhancements</b>
   * Thermostat devices
     * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump/emergency heat) or stage (heat 1/heat 2/cool 1/cool 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
@@ -37,8 +35,9 @@ This work represents a significant overhaul of the aforemention prior implementa
       
 * <b>Operational Enhancements</b>
   * Resume vs Program change: If a request is made to change the thermostat's Program (<i>aka</i> Climate) to the currently scheduled Program, and the request type is Temporary (<i>aka</i> nextTransition), a Resume is executed instead of setting a new Hold. If a Permanent hold is requested, it is effected directly, and no attempt to resume is made.
-  * <code>resumeProgram</code> now <i>always</i> requests that ALL outstanding program holds are removed, not just the most recent.
+  * <code>thermostat.resumeProgram</code> now defaults to <i>always</i> request that ALL outstanding program holds are removed, not just the most recent. 
     * NOTE: This is how the new ecobee3 thermostats operate via their UI and manually. Most Ecobee thermostats support the notion of "stacked" Holds, where each request to change temp/program would "stack" a new Hold on the old, and it would require multiple successive Resume program calls to reset the stack. For simplicity, this version always requests that ALL hold events be cleared on a rresume program request.
+    * NOTE: It is still possible programmatically to request that only the most recent hold request is resumed bu calling <code>thermostat.resumeProgram(false)</code>. The new Smart Zone helper app utilizes this to return from its temporary fanOn events. 
     * TODO: Note also that vacation holds <i>cannot</i> be cleared with the current implmentation of resumeProgram. Vacations must be deleted in order to clear them; this author <i>may</i> consider adding the ability to delete a vacation when resumeProgram is called.
   * Polling Frequency: As a result of the aforementioned operational efficiency enhancements, it is now possible to run ecobee thermostat devices with very short polling frequency. Although Ecobee documents that none of the API's data objects are updated more frequently than every 3 minutes, this has been observed to not be true. Runtime updates can happen at practically any time, and it appears that equipmentStatus updates are effected from the thermostat to the cloud and out to the API in nearly real time. I have run for days using a 1-minute polling frequency, with only infrequent (recoverable and recovered) errors. 
     * NOTE: Your mileage may vary - ecobee does in fact recommend <i><u>a minimum of 3 minutes</u></i>, and they may choose to prohibit shorter polling frequencies at any time.
@@ -46,10 +45,14 @@ This work represents a significant overhaul of the aforemention prior implementa
   * Watchdog Devices: A practical alternative to short polling frequency is now to configure one or more "watchdog" devices. In addition to ensuring that the scheduled polls haven't gotten derailed by the SmartThings infrastructure, an event from, say, a temperature change on a SmartThings MultiSensor will also cause a poll of the ecobee API to check if anything has changed. If not, no foul - the "heavy" API call is avoided.
 
 * <b>Helper SmartApps</b>
- * Mode/Routines handler: New "smart" changes to thermostat program:
+ * <b>Mode/Routines</b> handler: New "smart" changes to thermostat program:
    * Send a notification to the location's notification log explaining what was done
    * If current program is already the requested program, and we aren't in a hold, then leave it alone
-   * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply resumeProgram()
+   * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply <code>resumeProgram(resumeAll=true)</code>
+ * New <b>Smart Zone</b> Handler: attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC fan isn't run independently for each zone (thereby reducing electricity demand). 
+  * Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). 
+    * NOTE: this will create a temporary hold state ('Hold: Fan') on the slave thermostat(s)
+  * When the master switches to 'idle', 'heat' or 'cool', the slave program is resumed - <i>i.e.</i>, the Hold: Fan is popped off the hold stack
  
 * <b>Other Miscellaneous Enhancements</b>
   * SmartApp Name: it is now possible to rename each instance of the Ecobee (Connect) SmartApp. This is useful for those with multiple locations/hubs.
