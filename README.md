@@ -23,6 +23,8 @@ This work represents a significant overhaul of the aforemention prior implementa
 
     * If debugLevel is set to 3 or lower in the SmartApp, the "Last Poll" date and time is not sent; instead the thermostat devices' UI will show polling status as Succeeded/Incomplete/Failed. Changing the debugLevel in the SmartApp will dynamically cause the child thermostat(s) to begin displaying date of last poll;
   
+* <b>New Smart Zone helper app</b>
+ * Smart Zone attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC fan isn't run independently for each zone (thereby reducing electricity demand). Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). When the master switches to 'idle', 'heat' or 'cool', the slave program is resumed. (still needs logic to return the slave zone to it's previously running program, if any).
 * <b>User Interface Enhancements</b>
   * Thermostat devices
     * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump/emergency heat) or stage (heat 1/heat 2/cool 1/cool 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
