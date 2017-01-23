@@ -188,6 +188,7 @@ metadata {
 
 			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
 				attributeState("idle", backgroundColor:"#44b621")
+				attributeState("fan only", backgroundColor:"#990099")
 				attributeState("heating", backgroundColor:"#ffa81e")
 				attributeState("cooling", backgroundColor:"#269bd2")
 			}
@@ -812,7 +813,7 @@ void setCoolingSetpoint(Double setpoint) {
 	}
 }
 
-void resumeProgram() {
+void resumeProgram(resumeAll=true) {
 	// TODO: Put a check in place to see if we are already running the program. If there is nothing to resume, then save the calls upstream
 	def thermostatHold = device.currentValue("thermostatHold")
 	if (thermostatHold == "") {
@@ -827,7 +828,7 @@ void resumeProgram() {
 	
 	sendEvent("name":"thermostatStatus", "value":"Resuming schedule...", "description":statusText, displayed: false)
 	def deviceId = getDeviceId()
-	if (parent.resumeProgram(this, deviceId)) {
+	if (parent.resumeProgram(this, deviceId, resumeAll)) {
 		sendEvent("name":"thermostatStatus", "value":"Setpoint updating...", "description":statusText, displayed: false)
 		runIn(15, "poll")
 		LOG("resumeProgram() is done", 5)
