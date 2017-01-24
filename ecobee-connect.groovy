@@ -2672,14 +2672,8 @@ private def dirtyPollData() {
 }
 
 private String fixDateTimeString( String dateStr, String timeStr) {
-	// date is in ecobee format: YYYY-MM-DD
+	// date is in ecobee format: YYYY-MM-DD or null (meaning "today")
 	// time is in ecobee format: HH:MM:SS
-	// Objectives:
-	//		if date = today, don't include date in returned string
-	//		if date = tomorrow, return "tomorrow "
-	//		remove :SS from time
-	//		remove leading zero from hours (if present)
-	//		if HH > 12, subtract 12 from HH, add "pm", else add "am"
     String resultStr = ""
     String myDate = ""
     String myTime = ""
@@ -2709,7 +2703,7 @@ private String fixDateTimeString( String dateStr, String timeStr) {
         } else if (myDate != "") {
         	myDate = "on ${myDate}"
         }
-    	resultStr = myTime ? (myDate ? "${myDate} at ${myTime}" : "today at ${myTime}") : (myDate ? "${myDate}" : "")
+    	resultStr = myTime ? (myDate ? "${myDate} at ${myTime}" : "at ${myTime}") : (myDate ? "${myDate}" : "")
     }
     return resultStr
 }
