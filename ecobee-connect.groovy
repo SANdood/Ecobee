@@ -1350,14 +1350,15 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
     checkTherms = (checkTherms) ? checkTherms : thermostatIdsString
 	LOG("pollEcobeeAPI() - checking thermostats ${checkTherms}", 3)
     
-	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '"'
+	// get equipmentStatus every time
+	def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + checkTherms + '","includeEquipmentStatus":"true"'
 	
 	if (forcePoll || thermostatUpdated) {
 		jsonRequestBody += ',"includeSettings":"true","includeProgram":"true","includeEvents":"true"'
 		LOG("pollEcobeeAPI() - getting thermostat", 3)
 	}
 	if (forcePoll || runtimeUpdated) {
-		jsonRequestBody += ',"includeRuntime":"true","includeEquipmentStatus":"true"'
+		jsonRequestBody += ',"includeRuntime":"true"'
         String gw = ''
         // only get sensorData if we have any sensors configured
 		if (forcePoll || settings.ecobeesensors?.size() > 0) {
@@ -1409,6 +1410,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                 // collect the returned data into temporary individual caches (because we can't update individual Map items in an atomicState Map)
                 resp.data.thermostatList.each { stat ->
 					String tid = stat.identifier.toString()
+					tempEquipStat[tid] = stat.equipmentStatus // always store ("" is a valid return value)
                     if (forcePoll || thermostatUpdated) {
                         if (stat.settings) tempSettings[tid] = stat.settings		// don't overwrite data objects if not requested/returned
                         if (stat.program) tempProgram[tid] = stat.program
@@ -1418,11 +1420,16 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
  						if (stat.runtime) tempRuntime[tid] = stat.runtime
                         if (stat.remoteSensors) tempSensors[tid] = stat.remoteSensors // should be blank unless we requested it specifically
                         if (stat.weather) tempWeather[tid] = stat.weather
-                        tempEquipStat[tid] = stat.equipmentStatus // always store ("" is a valid return value)
+
                     }
                 }
                 
                 def numTherms = atomicState.settingsCurrentTherms.size()
+				// we ALWAYS get equipment status now...
+				if (tempEquipStat != [:]) {
+					if (tempEquipStat.size() != numTherms) tempEquipStat = atomicState.equipmentStatus + tempEquipStat // get less than all, just add to the table
+					atomicState.equipmentStatus = tempEquipStat
+				}
                 if (forcePoll || thermostatUpdated) {
                 	if (tempSettings != [:]) {								// ignore settings cache if no data retrieved
                    		if (tempSettings.size() != numTherms) tempSettings = atomicState.settings + tempSettings // got less than all, just add new to the cached Map
@@ -1451,10 +1458,6 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     if (tempWeather != [:]) {
                     	if (tempWeather.size() != numTherms) tempWeather = atomicState.weather + tempWeather // get less than all, just add to the table
                     	atomicState.weather = tempWeather
-                    }
-                    if (tempEquipStat != [:]) {
-                    	if (tempEquipStat.size() != numTherms) tempEquipStat = atomicState.equipmentStatus + tempEquipStat // get less than all, just add to the table
-                    	atomicState.equipmentStatus = tempEquipStat
                     }
 				}
                 
@@ -1854,7 +1857,10 @@ def updateThermostatData() {
 			lastPoll: lastPoll,
 			apiConnected: apiConnection,
         	timeOfDay: atomicState.timeOfDay,
-			debugLevel: settings.debugLevel.toInteger()
+			debugLevel: settings.debugLevel.toInteger(),
+			equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
+			thermostatOperatingState: thermOpStat,			// getThermostatOperatingState(equipStatus)
+			equipmentOperatingState: equipOpStat,
         ]
             
         if (forcePoll || atomicState.thermostatUpdated) {	// new settings, programs or events
@@ -1898,9 +1904,6 @@ def updateThermostatData() {
 				humidity: atomicState.runtime[tid].actualHumidity,
 				humiditySetpoint: humiditySetpoint,
 				motion: occupancy,
-				equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
-				thermostatOperatingState: thermOpStat,			// getThermostatOperatingState(equipStatus)
-				equipmentOperatingState: equipOpStat,
 				weatherSymbol: atomicState.weather[tid].forecasts[0].weatherSymbol.toString(),
 				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
 			]
@@ -1915,7 +1918,7 @@ def updateThermostatData() {
 
 // translate Ecobee equipmentStatus into SmartThings thermostatOperatingState
 // NOT USED ANY MORE
-def getThermostatOperatingState(equipmentStatus) {
+/* def getThermostatOperatingState(equipmentStatus) {
 	def equipStatus = equipmentStatus.trim().toUpperCase()
     
     LOG("getThermostatOperatingState() - equipStatus == ${equipStatus}", 4)
@@ -1923,7 +1926,7 @@ def getThermostatOperatingState(equipmentStatus) {
 	def currentOpState = equipStatus.contains('HEAT')? 'heating' : (equipStatus.contains('COOL')? 'cooling' : 
     	equipStatus.contains('FAN')? 'fan only': 'idle')
 	return currentOpState
-}
+} */
 
 def getChildThermostatDeviceIdsString(singleStat = null) {
 	if(!singleStat) {
