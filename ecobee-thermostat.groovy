@@ -119,6 +119,7 @@ metadata {
 		attribute "coolRange", "string"
 		attribute "thermostatHold", "string"
         attribute "holdEndsAt", "string"
+		attribute "holdStatus", "string"
 		
 		// attribute "debugLevel", "number"
 		
@@ -209,7 +210,7 @@ metadata {
         }
 
         // Show status of the API Connection for the Thermostat
-		standardTile("apiStatus", "device.apiConnected", width: 2, height: 2) {
+		standardTile("apiStatus", "device.apiConnected", width: 1, height: 1) {
         	state "full", label: "API", backgroundColor: "#44b621", icon: "st.contact.contact.closed"
             state "warn", label: "API ", backgroundColor: "#FFFF33", icon: "st.contact.contact.open"
             state "lost", label: "API ", backgroundColor: "#ffa81e", icon: "st.contact.contact.open"
@@ -322,7 +323,6 @@ metadata {
 		standardTile("refresh", "device.thermostatMode", width: 2, height: 2,inactiveLabel: false, decoration: "flat") {
             state "default", action:"refresh.refresh", label: "Refresh", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
 		}
-        
         
         standardTile("resumeProgram", "device.resumeProgram", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "resume", action:"resumeProgram", nextState: "updating", label:'Resume', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/action_resume_program.png"
@@ -472,11 +472,15 @@ metadata {
 			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
 		}
         
-        valueTile("lastPoll", "device.lastPoll", height: 2, width: 4, decoration: "flat") {
-			state "thermostatStatus", label:'Last Poll:\n${currentValue}', backgroundColor:"#ffffff"
+        valueTile("lastPoll", "device.lastPoll", height: 1, width: 5, decoration: "flat") {
+			state "thermostatStatus", label:'Last Poll: ${currentValue}', backgroundColor:"#ffffff"
 		}
         
-        standardTile("ecoLogo", "device.logo", inactiveLabel: false, width: 2, height: 2) {
+		valueTile("holdStatus", "device.holdStatus", height: 1, width: 5, decoration: "flat") {
+			state "default", label:'${currentValue}' // , backgroundColor:"#ffffff"
+		}
+		
+        standardTile("ecoLogo", "device.logo", inactiveLabel: false, width: 1, height: 1) {
 			state "default",  icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"			
 		}
 
@@ -499,8 +503,8 @@ metadata {
             
         	/* "operatingState", */  "equipmentState", "weatherIcon",  "refresh",  
             "currentProgramIcon", "weatherTemperature", "motionState", 
+            "holdStatus", "oneBuffer", 
             "modeShow", "fanModeLabeled",  "resumeProgram", 
-            
             "oneBuffer", "commandDivider", "oneBuffer",
             "coolSliderControl", "coolingSetpoint",
             "heatSliderControl", "heatingSetpoint",            
@@ -587,8 +591,8 @@ def generateEvent(Map results) {
 				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
 			} else if (name=="debugLevel") {
 				isChange = isStateChange(device, name, value.toString())
-				event = eventFront +  [value: value.toString(), isStateChange: isChanged, displayed: false]
-            } else if (name=="apiConnected") {
+				if (isChange) event = eventFront +  [value: value.toString(), isStateChange: true, displayed: false]
+			} else if (name=="apiConnected") {
             	// Treat as if always changed to ensure an updated value is shown on mobile device and in feed
                 isChange = isStateChange(device,name,value.toString());
                 if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
