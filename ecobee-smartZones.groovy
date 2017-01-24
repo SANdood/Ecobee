@@ -79,16 +79,22 @@ def updated() {
 
 def initialize() {
 	LOG("initialize() entered")
-    if(tempDisable == true) {
-    	LOG("Temporarily Disabled as per request.", 2, null, "warn")
-    	return true
-    }
 	
 	// Get slaves into a known state
 	slaveThermostats.each { stat ->
-		stat.resumeProgram()
-		state."${stat.displayName}-fanOn" = false
+		if (state."${stat.displayName}-fanOn") {
+			if (stat.currentValue("currentProgramName") == "Hold: Fan") {
+				stat.resumeProgram(false)	// just pop this hold off the stack, which will return the fan to prior mode (auto/circulate)
+			} // else { another Program overrode our Fan hold, let them clean up the hold stack}
+			state."${stat.displayName}-fanOn" = false
+		}
 	}
+	
+	// Now, just exit if we are disabled...
+	if(tempDisable == true) {
+    	LOG("Temporarily Disabled as per request.", 2, null, "warn")
+    	return true
+    }
 	
 	// check the master, but give it a few seconds first
 	runIn (5, "masterFanStateHandler", [overwrite: true])
