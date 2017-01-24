@@ -1134,7 +1134,7 @@ def pollScheduled() {
 def pollInit() {
 	LOG("pollInit()", 5)
     atomicState.forcePoll = true // Initialize the variable and force a poll even if there was one recently    
-	pollChildren(null) // Hit the ecobee API for update on all thermostats
+	runIn(5, pollChildren) 		// Hit the ecobee API for update on all thermostats, in 5 seconds
 }
 
 def pollChildren(child = null) {
@@ -1734,8 +1734,12 @@ def updateThermostatData() {
             }        	
 		}
 		def thermostatHold = ""
-        def holdEndsAt = ""
+        String holdEndsAt = ""
+        String tstatDate = stat.thermostatTime.take(10)
+        String notToday = ""
         if (runningEvent) {
+        	notToday = (runningEvent.endDate == tstatDate) ? "" : runningEvent.endDate 
+            holdEndsAt = fixDateTimeString( notToday, runningEvent.endTime)
 			thermostatHold = runningEvent.type
             LOG("Found a running Event: ${runningEvent}", 3) 
             def tempClimateRef = runningEvent.holdClimateRef ?: ""
@@ -1743,7 +1747,6 @@ def updateThermostatData() {
             	if (tempClimateRef != "") {
 					currentClimate = (tempClimateRef ? (atomicState.program[tid].climates.find { it.climateRef == tempClimateRef }).name : "")
                		currentClimateName = "Hold: " + currentClimate
-                    if (runningEvent.endTime) holdEndsAt = runningEvent.endTime.take(5) // (##:##:## --> ##:##)
                 } else {									// Not running a program, are we holding for something else?
                 	log.debug "runningEvent: ${runningEvent}"
                 	if (runningEvent.name == "auto") {		// Handle the "auto" climates (includes fan on override, and maybe the Smart Recovery?)
@@ -1754,7 +1757,6 @@ def updateThermostatData() {
                         } else {
                         	currentClimateName = "Auto"
                         }
-                        if (runningEvent.endTime) holdEndsAt = runningEvent.endTime.take(5) // (##:##:## --> ##:##)
                     }
                 }  // if we can't tell which hold is in effect, leave currentClimate, currentClimateName and currentClimateId blank/null/empty
 			} else if (runningEvent.type == "vacation" ) {
@@ -1850,6 +1852,9 @@ def updateThermostatData() {
         def apiConnection = apiConnected()
         def lastPoll = (debugLevel(4)) ? atomicState.lastPollDate : (apiConnection=='full') ? "Succeeded" : (apiConnection=='warn') ? "Incomplete" : "Failed"
         
+		def statusMsg = ""
+		if (holdEndsAt != "") statusMsg = (thermostatHold=='hold') ? "Hold ends ${holdEndsAt}" : (thermostatHold=='vacation') ? "Vacation ends ${holdEndsAt}" : "Event ends ${holdEndsAt}"
+		
 		// we always send these because they change independent of the ecobee API objects
         def data = [
            	decimalPrecision: settings.tempDecimals,
@@ -1861,7 +1866,10 @@ def updateThermostatData() {
 			equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
 			thermostatOperatingState: thermOpStat,			// getThermostatOperatingState(equipStatus)
 			equipmentOperatingState: equipOpStat,
+			holdStatus: statusMsg
         ]
+		
+
             
         if (forcePoll || atomicState.thermostatUpdated) {	// new settings, programs or events
 			data += [
@@ -2661,4 +2669,47 @@ private def dirtyPollData() {
     atomicState.latestRevisions = "bar"
 	atomicState.lastEquipStatus = null
 	atomicState.lastEquipOpStat = null
+}
+
+private String fixDateTimeString( String dateStr, String timeStr) {
+	// date is in ecobee format: YYYY-MM-DD
+	// time is in ecobee format: HH:MM:SS
+	// Objectives:
+	//		if date = today, don't include date in returned string
+	//		if date = tomorrow, return "tomorrow "
+	//		remove :SS from time
+	//		remove leading zero from hours (if present)
+	//		if HH > 12, subtract 12 from HH, add "pm", else add "am"
+    String resultStr = ""
+    String myDate = ""
+    String myTime = ""
+	if (dateStr != "") {
+		myDate = dateStr.drop(5)	// get MM-DD
+        String delim = myDate.substring(2,3)
+        int month = myDate.take(2).toInteger()
+        int days = myDate.drop(3).toInteger() 
+        myDate = "${month}${delim}${days}"
+	}
+    
+    if (timeStr != "") {
+		myTime = timeStr.take(5)		// get HH:MM
+		int hours = myTime.take(2).toInteger()
+        int mins = myTime.drop(3).toInteger()
+		if (hours < 12) {
+        	if (hours==0) hours = 12
+			myTime = "${hours}" + myTime.drop(2) + "am"
+		} else {
+        	if (hours==12) hours = 24		// hack
+			myTime = "${hours-12}" + myTime.drop(2) + "pm"
+		}
+	}
+    if (myDate || myTime) {
+    	if (dateStr == "2035-01-01" ) { 		// to Infinity
+        	myDate = "many years from now"
+        } else if (myDate != "") {
+        	myDate = "on ${myDate}"
+        }
+    	resultStr = myTime ? (myDate ? "${myDate} at ${myTime}" : "today at ${myTime}") : (myDate ? "${myDate}" : "")
+    }
+    return resultStr
 }
