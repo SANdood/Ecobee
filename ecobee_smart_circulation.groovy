@@ -47,33 +47,40 @@ def mainPage() {
         
         section(title: "Select Thermostat") {
         	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-        	input (name: "theThermostats", type:"capability.Thermostat", title: "Pick Ecobee Thermostat(s)", required: true, multiple: true, submitOnChange: true)            
+        	input (name: "theThermostat", type:"capability.Thermostat", title: "Pick Ecobee Thermostat(s)", required: true, 
+				   multiple: false, submitOnChange: true)            
 		}
         section(title: "Circulation Time Settings") {
-            input (name: minFanOnTime (min = 0..55)
-            input (name: maxFanOnTime (max = 5..55)
-            input (name: fanOnTimeDelta (5)
-            input (name: fanAdjustMinutes (60)
-            input (name: reduceWhenPossible, type: boolean
+            input (name: "minFanOnTime", type: "number", title: "Set minimum circulation minutes per hour", required: true,
+				   defaultValue: "5", description: "5", range: "0..55")
+            input (name: "maxFanOnTime", type: "number", title: "Set maximum circulation minutes per hour", required: true,
+				   defaultValue: "55", description: "55", range: "0..55")
+            input (name: "fanOnTimeDelta", type: "number", title: "Set circulation time adjustment (minutes)", required: true,
+				   defaultValue: "5", description: "5", range: "1..20")
+            input (name: "fanAdjustMinutes", type: "number", title: "Adjustment period (minutes)", required: true,
+				   defaultValue: "60", description: "60")
         }
-        sect
         
         section(title: "Select Temperature Sensors") {
         	// Settings option for using Mode or Routine
-            input(name: "theSensors", title: "Pick temperature sensor(s)", type: "capability.Temperature Measurement", required: true, multiple: true, submitOnChange: true)
+            input(name: "theSensors", title: "Pick temperature sensor(s)", type: "capability.Temperature Measurement", 
+				  required: true, multiple: true, submitOnChange: true)
 		}
 		
 		section(title: "Max Temperature Delta" ){
-            input(name: "deltaTemp", type: "number", min 0..10
+            input(name: "deltaTemp", type: "decimal", title: "Enter temperature delta for making adjustments", required: true,
+				  defaultValue: "2.0", description: "2.0", range "1..9")
         }
-        
+       
+		section([mobileOnly:true]) {
+            mode title: "Enable for specific mode(s)", required: false
+        }
+		
 		section(title: "Temporarily Disable?") {
         	input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
         section (getVersionLabel()) {}
-        
-        section (enable for certain location.modes only)
     }
 }
 
@@ -82,7 +89,7 @@ def installed() {
 	LOG("installed() entered", 5)
     
     // create state variables:
-    
+    atomicState.lastAdjustment = now() - (3601 * settings.fanAdjustMinutes.toLong()).toLong()
 	initialize()  
 }
 
@@ -105,30 +112,26 @@ def initialize() {
 	
     atomicState.lastAdjustment = null
     
-    subscribe(theThermostats, "thermostatOperatingState", thermostatHandler)
-    subscribe(theSensors, "temperature", temperatureHandler)
+    subscribe(theThermostats, "thermostatOperatingState", deltaHandler)
+    subscribe(theSensors, "temperature", deltaHandler)
+	subscribe(location, "mode", deltaHandler)
 
     LOG("initialize() complete", 3)
 }
 
-def thermostatHandler(evt=null) {
-	LOG("thermostatHandler() entered with evt: ${evt}", 5)
-    
-    // when thermostatOperatingState changes, check temperature deltas and adjust if appropriate
-    temperatureHandler()
-
-}
-
-def temperatureHandler(evt=null) {
+def deltaHandler(evt=null) {
     LOG("temperatureHandler() entered with evt: ${evt}", 5)
     
     if (atomicState.lastAdjustment) {
-        def timeNow = 
-        if (timeNow =< atomicState.lastAdjustment + settings.fanAdjustMinutes) {
+        def timeNow = now()
+        if (timeNow <= (atomicState.lastAdjustment + (3600*settings.fanAdjustMinutes))) {
             LOG("Not time to adjust yet",3)
             return
-            }
-    1. Has it been an hour since our last change? If not, just return
+		}
+	}
+
+	Double temps = theSensors?.currentValue("temperature").toDouble()
+	
     2. Find the min, max & delta between all the subscribed thermometers
     3. if delta > settings.deltaTemp
     3a.     if current.fanMinOnTime.toInteger() < maxFanOnTime
