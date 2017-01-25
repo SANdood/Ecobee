@@ -152,9 +152,10 @@ metadata {
 			}
 
 			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
-				attributeState("idle", backgroundColor:"#44b621")
-				attributeState("heating", backgroundColor:"#ffa81e")
-				attributeState("cooling", backgroundColor:"#269bd2")
+				attributeState("idle", backgroundColor:"#d28de0")			// ecobee purple/magenta
+                attributeState("fan only", backgroundColor:"#efe059")		// ecobee airplane/vacation yellow
+				attributeState("heating", backgroundColor:"#ff9c14")		// ecobee snowflake blue
+				attributeState("cooling", backgroundColor:"#2db9e7")		// ecobee flame orange
 			}
 			tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
 				attributeState("off", label:'${name}')
@@ -188,10 +189,10 @@ metadata {
 			}
 
 			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
-				attributeState("idle", backgroundColor:"#44b621")
-				attributeState("fan only", backgroundColor:"#990099")
-				attributeState("heating", backgroundColor:"#ffa81e")
-				attributeState("cooling", backgroundColor:"#269bd2")
+				attributeState("idle", backgroundColor:"#d28de0")			// ecobee purple/magenta
+                attributeState("fan only", backgroundColor:"#efe059")		// ecobee airplane/vacation yellow
+				attributeState("heating", backgroundColor:"#ff9c14")		// ecobee snowflake blue
+				attributeState("cooling", backgroundColor:"#2db9e7")		// ecobee flame orange
 			}
 
 			tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
@@ -216,7 +217,7 @@ metadata {
             state "lost", label: "API ", backgroundColor: "#ffa81e", icon: "st.contact.contact.open"
 		}
 
-		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: true, icon: "st.Home.home1") {
+		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
 			state("temperature", label:'${currentValue}°', unit:"F",
 				backgroundColors: getTempColors()
 			)
@@ -477,7 +478,7 @@ metadata {
 		}
         
 		valueTile("holdStatus", "device.holdStatus", height: 1, width: 5, decoration: "flat") {
-			state "default", label:'${currentValue}' // , backgroundColor:"#ffffff"
+			state "default", label:'${currentValue}' //, backgroundColor:"#000000", foregroudColor: "#ffffff"
 		}
 		
         standardTile("ecoLogo", "device.logo", inactiveLabel: false, width: 1, height: 1) {
