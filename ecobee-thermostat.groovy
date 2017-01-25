@@ -118,8 +118,10 @@ metadata {
 		attribute "heatRange", "string"
 		attribute "coolRange", "string"
 		attribute "thermostatHold", "string"
-        attribute "holdEndsAt", "string"
+//        attribute "holdEndsAt", "string"
 		attribute "holdStatus", "string"
+        attribute "heatDifferential", "number"
+        attribute "coolDifferential", "number"
 		
 		// attribute "debugLevel", "number"
 		
@@ -153,7 +155,7 @@ metadata {
 
 			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
 				attributeState("idle", backgroundColor:"#d28de0")			// ecobee purple/magenta
-                attributeState("fan only", backgroundColor:"#efe059")		// ecobee airplane/vacation yellow
+                attributeState("fan only", backgroundColor:"66cc00")		// ecobee green
 				attributeState("heating", backgroundColor:"#ff9c14")		// ecobee snowflake blue
 				attributeState("cooling", backgroundColor:"#2db9e7")		// ecobee flame orange
 			}
@@ -190,7 +192,7 @@ metadata {
 
 			tileAttribute("device.thermostatOperatingState", key: "OPERATING_STATE") {
 				attributeState("idle", backgroundColor:"#d28de0")			// ecobee purple/magenta
-                attributeState("fan only", backgroundColor:"#efe059")		// ecobee airplane/vacation yellow
+                attributeState("fan only", backgroundColor:"#66cc00")		// ecobee green
 				attributeState("heating", backgroundColor:"#ff9c14")		// ecobee snowflake blue
 				attributeState("cooling", backgroundColor:"#2db9e7")		// ecobee flame orange
 			}
@@ -1100,9 +1102,24 @@ void raiseSetpoint() {
         return
 	}
 
-   	def heatingSetpoint = device.currentValue("heatingSetpoint")
-	def coolingSetpoint = device.currentValue("coolingSetpoint")
-	def thermostatSetpoint = device.currentValue("thermostatSetpoint").toDouble()
+   	def heatingSetpoint = device.currentValue("heatingSetpoint").toDouble()
+	def coolingSetpoint = device.currentValue("coolingSetpoint").toDouble()
+    def thermostatSetpoint = device.currentValue("thermostatSetpoint").toDouble()
+    if (device.currentValue("thermostatOpertaingState") == 'idle') {
+    	if (thermostatSetpoint == heatingSetpoint) {
+        	heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble() 	// correct from the display value
+            thermostatSetpoint = heatingSetpoint
+            coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        } else if (thermostatSetpoint == coolingSetpoint) {
+         	coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+            thermostatSetpoint = coolingSetpoint
+            heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+        } else {
+          	heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+            coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        }
+    }
+	
 	LOG("raiseSetpoint() mode = ${mode}, heatingSetpoint: ${heatingSetpoint}, coolingSetpoint:${coolingSetpoint}, thermostatSetpoint:${thermostatSetpoint}", 4)
 
    	if (thermostatSetpoint) {
@@ -1135,6 +1152,20 @@ void lowerSetpoint() {
     	def heatingSetpoint = device.currentValue("heatingSetpoint")
 		def coolingSetpoint = device.currentValue("coolingSetpoint")
 		def thermostatSetpoint = device.currentValue("thermostatSetpoint").toDouble()
+    	if (device.currentValue("thermostatOpertaingState") == 'idle') {
+    		if (thermostatSetpoint == heatingSetpoint) {
+        		heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble() 	// correct from the display value
+            	thermostatSetpoint = heatingSetpoint
+            	coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        	} else if (thermostatSetpoint == coolingSetpoint) {
+         		coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+            	thermostatSetpoint = coolingSetpoint
+            	heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+        	} else {
+          		heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+            	coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        	}	
+    	}
 		LOG("lowerSetpoint() mode = ${mode}, heatingSetpoint: ${heatingSetpoint}, coolingSetpoint:${coolingSetpoint}, thermostatSetpoint:${thermostatSetpoint}", 4)
 
         if (thermostatSetpoint) {
@@ -1162,12 +1193,27 @@ void alterSetpoint(temp) {
 	def mode = device.currentValue("thermostatMode")
 	def heatingSetpoint = device.currentValue("heatingSetpoint")
 	def coolingSetpoint = device.currentValue("coolingSetpoint")
+    def thermostatSetpoint = device.currentValue("thermostatSetpoint")
+    if (device.currentValue("thermostatOpertaingState") == 'idle') {
+    	if (thermostatSetpoint == heatingSetpoint) {
+        	heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble() 	// correct from the display value
+            thermostatSetpoint = heatingSetpoint
+            coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        } else if (thermostatSetpoint == coolingSetpoint) {
+         	coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+            thermostatSetpoint = coolingSetpoint
+            heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+        } else {
+          	heatingSetpoint = heatingSetpoint + device.currentValue("heatDifferential").toDouble()
+            coolingSetpoint = coolingSetpoint - device.currentValue("coolDifferential").toDouble()
+        }
+    }
     def currentTemp = device.currentValue("temperature")
     def heatHigh = device.currentValue('heatHigh')
     def heatLow = device.currentValue('heatLow')
     def coolHigh = device.currentValue('coolHigh')
     def coolLow = device.currentValue('coolLow')
-    def saveThermostatSetpoint = device.currentValue("thermostatSetpoint")
+    def saveThermostatSetpoint = thermostatSetpoint
 	def deviceId = getDeviceId()
 
 	def targetHeatingSetpoint = heatingSetpoint
@@ -1279,7 +1325,7 @@ def generateStatusEvent() {
         } else if (operatingState == "cooling") {
         	statusText = "Cooling to ${coolingSetpoint}° (Auto)"
         } else {
-			statusText = "Idle (Auto Heat: ${heatingSetpoint}°/Cool: ${coolingSetpoint}°)"
+			statusText = "Idle (Auto ${heatingSetpoint}°-${coolingSetpoint}°)"
         }
 	} else if (mode == "off") {
 		statusText = "Right Now: Off"
