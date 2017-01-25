@@ -1635,6 +1635,8 @@ def updateThermostatData() {
 
 		LOG("Updating dni $dni", 4)
 
+		def equipStatus = atomicState.equipmentStatus[tid]		// need this in a few places
+        
     // Handle things that only change when runtime object is updated)
         def occupancy = "not supported"
         def tempTemperature
@@ -1663,10 +1665,16 @@ def updateThermostatData() {
 			if (atomicState.hasInternalSensors) { occupancy = (occupancy == "true") ? "active" : "inactive" }
 			
 			// Temperatures
-			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].actualTemperature.toDouble() / 10), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
-        	tempHeatingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].desiredHeat.toDouble() / 10), "F", settings.tempDecimals.toInteger())
-        	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].desiredCool.toDouble() / 10), "F", settings.tempDecimals.toInteger())
-        	tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[tid].forecasts[0].temperature.toDouble() / 10)), "F", settings.tempDecimals.toInteger())
+			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].actualTemperature.toDouble() / 10.0), "F", settings.tempDecimals.toInteger() /* (usingMetric ? 1 : 1) */)
+            Double tempHeatAt = atomicState.runtime[tid].desiredHeat.toDouble()
+            Double tempCoolAt = atomicState.runtime[tid].desiredCool.toDouble()
+            if (equipStatus.size() == 0) {											// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
+            	tempHeatAt = tempHeatAt - atomicState.settings[tid].stage1HeatingDifferentialTemp.toDouble()
+                tempCoolAt = tempCoolAt + atomicState.settings[tid].stage1CoolingDifferentialTemp.toDouble()
+            }
+        	tempHeatingSetpoint = myConvertTemperatureIfNeeded( (tempHeatAt / 10.0), "F", settings.tempDecimals.toInteger())
+        	tempCoolingSetpoint = myConvertTemperatureIfNeeded( (tempCoolAt / 10.0), "F", settings.tempDecimals.toInteger())
+        	tempWeatherTemperature = myConvertTemperatureIfNeeded( ((atomicState.weather[tid].forecasts[0].temperature.toDouble() / 10.0)), "F", settings.tempDecimals.toInteger())
         }
         
 	// handle[tid] things that only change when the thermostat object is updated
@@ -1682,8 +1690,13 @@ def updateThermostatData() {
 		def hasElectric
 		def hasBoiler
 		def auxHeatMode
+		def Double tempHeatDiff = 0.0
+        def Double tempCoolDiff = 0.0
 
 		if (forcePoll || thermostatUpdated) {
+            tempHeatDiff = atomicState.settings[tid].stage1HeatingDifferentialTemp.toDouble() / 10.0
+            tempCoolDiff = atomicState.settings[tid].stage1CoolingDifferentialTemp.toDouble() / 10.0
+            
 			// RANGES
 			// UI works better with the same ranges for both heat and cool...
 			// but the device handler isn't using these values for the UI right now (can't dynamically define the range)
@@ -1816,7 +1829,6 @@ def updateThermostatData() {
 		def heatStages = atomicState.settings[tid].heatStages
 		def coolStages = atomicState.settings[tid].coolStages 
 		
-		def equipStatus = atomicState.equipmentStatus[tid]
 		def equipOpStat
         def thermOpStat 
 		if (equipStatus.size() == 0) {
@@ -1866,7 +1878,7 @@ def updateThermostatData() {
 			equipmentStatus: equipStatus,					// so that we can detect Heat/Cool 1 & 2 and aux equipment
 			thermostatOperatingState: thermOpStat,			// getThermostatOperatingState(equipStatus)
 			equipmentOperatingState: equipOpStat,
-			holdStatus: statusMsg
+			holdStatus: statusMsg,
         ]
 		
 
@@ -1899,21 +1911,23 @@ def updateThermostatData() {
             	hasBoiler: hasBoiler,
 				auxHeatMode: auxHeatMode,
             	hasHumidifier: hasHumidifier,
-				hasDehumidifier: hasDehumidifier
+				hasDehumidifier: hasDehumidifier,
+                heatDifferential: String.format("%.${settings.tempDecimals}f", tempHeatDiff),
+                coolDifferential: String.format("%.${settings.tempDecimals}f", tempCoolDiff),                
 			]
 		}
 		
 		if (forcedPoll || atomicState.runtimeUpdated) {
 			data += [            
-				temperature:  String.format("%.${settings.tempDecimals}f", tempTemperature),  // usingMetric ? tempTemperature : tempTemperature.round(1) /*.toInteger()*/,
-				heatingSetpoint: String.format("%.${settings.tempDecimals}f", tempHeatingSetpoint), //usingMetric ? tempHeatingSetpoint : tempHeatingSetpoint.round(1) /*.toInteger()*/,
-				coolingSetpoint: String.format("%.${settings.tempDecimals}f", tempCoolingSetpoint), //usingMetric ? tempCoolingSetpoint : tempCoolingSetpoint.round(1) /*.toInteger()*/,
+				temperature:  String.format("%.${settings.tempDecimals}f", tempTemperature), 
+				heatingSetpoint: String.format("%.${settings.tempDecimals}f", tempHeatingSetpoint), 
+				coolingSetpoint: String.format("%.${settings.tempDecimals}f", tempCoolingSetpoint), 
 				thermostatFanMode: currentFanMode,
 				humidity: atomicState.runtime[tid].actualHumidity,
 				humiditySetpoint: humiditySetpoint,
 				motion: occupancy,
 				weatherSymbol: atomicState.weather[tid].forecasts[0].weatherSymbol.toString(),
-				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature), //usingMetric ? tempWeatherTemperature : tempWeatherTemperature.round(1) /*.toInteger()*/	
+				weatherTemperature: String.format("%.${settings.tempDecimals}f", tempWeatherTemperature),	
 			]
 		}
 		LOG("Event Data (${tid}) = ${data}", 3)
