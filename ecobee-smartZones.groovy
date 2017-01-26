@@ -47,12 +47,12 @@ def mainPage() {
         
         section(title: "Select Master Thermostat") {
         	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-        	input ("masterThermostat", "capability.Thermostat", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)            
+        	input ("masterThermostat", "capability.thermostat", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)            
 		}
         
         section(title: "Select Slave Thermostats") {
         	// Settings option for using Mode or Routine
-            input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.Thermostat", required: true, multiple: true, submitOnChange: true)
+            input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.thermostat", required: true, multiple: true, submitOnChange: true)
 		}
 		
 		// section(title: "Fan Only" ){}
