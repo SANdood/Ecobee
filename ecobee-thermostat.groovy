@@ -63,6 +63,7 @@ metadata {
 		command "switchMode"
         
         command "setThermostatProgram"
+        command "setFanMinOnTime"
         command "home"
 
 // Unfortunately we cannot overload the internal definition of 'sleep()', and calling this will silently fail (actually, it does a
@@ -122,6 +123,7 @@ metadata {
 		attribute "holdStatus", "string"
         attribute "heatDifferential", "number"
         attribute "coolDifferential", "number"
+        attribute "fanMinOnTime", "number"
 		
 		// attribute "debugLevel", "number"
 		
@@ -1062,6 +1064,17 @@ def fanCirculate() {
 def fanOff() {
 	LOG("fanOff()", 5)
 	setThermostatFanMode("off")
+}
+
+def setFanMinOnTime(minutes=10) {
+	LOG("setFanMinOnTime(${minutes})", 5, null, "trace")
+    def deviceId = getDeviceId()
+    
+    if ((minutes.toInteger() >=0) && (minutes.toInteger() <=  55)) {
+		parent.setFanMinOnTime(this, deviceId, minutes)
+    } else {
+    	LOG("setFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
+    }
 }
 
 def generateSetpointEvent() {
