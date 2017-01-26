@@ -84,17 +84,12 @@ def mainPage() {
 def installed() {
 	LOG("installed() entered", 5)
     
-    // create state variables:
-    atomicState.lastAdjustment = now() - (3601 * settings.fanAdjustMinutes.toLong()).toLong()
 	initialize()  
 }
 
 def updated() {
 	LOG("updated() entered", 5)
 	unsubscribe()
-    
-    //verify state variable
-    atomicState.lastAdjustment = now() - (3601 * settings.fanAdjustMinutes.toLong()).toLong()
     initialize()
 }
 
@@ -106,66 +101,89 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
+    // Initialize state as if we haven't checked in more than fanAdjustMinutes
+    atomicState.lastAdjustment = now() - (60001 * settings.fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event
     
     subscribe(theThermostat, "thermostatOperatingState", deltaHandler)
     log.debug "theThermostat: ${theThermostat}, fanMinOnTime: ${theThermostat.currentValue('fanMinOnTime')}"
     subscribe(theSensors, "temperature", deltaHandler)
-	subscribe(location, "mode", deltaHandler)
+
+	// we'll use these as watchdogs - "random" events that occur during long idle periods (e.g., home is in Away or Night mode
+    subscribe(location, "mode", deltaHandler)
+    subscribe(location, "routineExecuted", deltaHandler)
+    subscribe(location, "sunset", deltaHandler)
+    subscribe(location, "sunrise", deltaHandler)
+    subscribe(location, "position", deltaHandler)
 
 	if (theThermostat.currentValue("fanMinOnTime").toInteger() < settings.minFanOnTime) settings.theThermostat.setFanMinOnTime( settings.minFanOnTime )
-      
+    
+    deltaHandler()
     LOG("initialize() complete")
-    runIn( 5, deltaHandler )
 }
 
 def deltaHandler(evt=null) {
     LOG("temperatureHandler() entered with evt: ${evt}", 5)
     
+    // Makes no sense to change fanMinOnTime while heating, cooling or fan only is running - take action ONLY on events while idle
+    def statState = theThermostat.currentValue("thermostatOperatingState")
+    if (statState != 'idle') {
+    	log.debug("${theThermostat} is ${statState}, no adjustments made")
+        return
+    }
+    
     if (atomicState.lastAdjustment) {
         def timeNow = now()
-        if (timeNow <= (atomicState.lastAdjustment + (3600*settings.fanAdjustMinutes))) {
-            LOG("Not time to adjust yet",3)
+        if (timeNow <= (atomicState.lastAdjustment + (60000 * settings.fanAdjustMinutes))) {
+            log.debug("Not time to adjust yet")
             return
 		}
 	}
 
 	def temps = [] 
     theSensors.each {
-    	if (it.currentValue("temperature").isNumber() ) temps += [it.currentValue("temperature")]
+    	def temp = it.currentValue("temperature")
+    	if (temp.isNumber() ) temps += [temp]
     }
     log.debug "temps: ${temps}"
+    if (temps.size() < 2) return // ignore if we don't have enough valid data
+    
 	Double min = temps.min().toDouble()
 	Double max = temps.max().toDouble()
 	Double delta = max - min
 	Integer currentOnTime = theThermostat.currentValue("fanMinOnTime").toInteger()
 	Integer newOnTime = currentOnTime
 	
-	def result = null
 	if (delta > settings.deltaTemp) {			// need longer recirculation
 		if (currentOnTime < settings.maxOnTime) {
 			newOnTime = currentOnTime + settings.fanOnTimeDelta
 			if (newOnTime > settings.maxFanOnTime) {
 				newOnTime = settings.maxFanOnTime
 			}
-            log.debug "theThermostat: ${theThermostat}, newOnTime: ${newOnTime}"
-			theThermostat.setFanMinOnTime(newOnTime)
-			// log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
-			atomicState.lastAdjustment = now()
-		}
-	} else if (delta < settings.deltaTemp) {
-		if (currentOnTime > settings.minOnTime) {
-			newOnTime = currentOnTime - settings.fanOnTimeDelta
-			if (newOnTime < settings.minFanOnTime) {
-				newOnTime = settings.minFanOnTime
+			if (currentOnTime != newOnTime) {
+				log.debug "Increasing circulation time for ${theThermostat} to ${newOnTime} minutes"
+				theThermostat.setFanMinOnTime(newOnTime)
+				atomicState.lastAdjustment = now()
+                return
 			}
-            log.debug "theThermostat: ${theThermostat}, newOnTime: ${newOnTime}"
-			theThermostat.setFanMinOnTime(newOnTime)
-			// log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
-			atomicState.lastAdjustment = now()
 		}
 	} else {
-		log.debug "No adjustment required"
+        Double target = (getTemperatureScale() == "C") ? 0.5556 : 1.0
+    	if ((max - min) < target) {			// stop adjusting once we get within 1F or .5C
+			if (currentOnTime > settings.minOnTime) {
+				newOnTime = currentOnTime - settings.fanOnTimeDelta
+				if (newOnTime < settings.minFanOnTime) {
+					newOnTime = settings.minFanOnTime
+				}
+                if (currentOnTime != newOnTime) {
+            		log.debug "Decreasing circulation time for ${theThermostat} to ${newOnTime} minutes"
+					theThermostat.setFanMinOnTime(newOnTime)
+					atomicState.lastAdjustment = now()
+                    return
+                }
+            }
+		}
 	}
+	log.debug "No adjustment required"
 }
 
 // Helper Functions
