@@ -13,8 +13,9 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *	0.1.1	01/25/2017	Barry Burke Initial Release	
  */
-def getVersionNum() { return "0.1.0" }
+def getVersionNum() { return "0.1.1" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
 
@@ -124,10 +125,23 @@ def initialize() {
 def deltaHandler(evt=null) {
     LOG("temperatureHandler() entered with evt: ${evt}", 5)
     
+    if (atomicState.amIRunning) {return} else {atomicState.amIRunning = true}
+    
+    def temps = [] 
+    theSensors.each {
+    	def temp = it.currentValue("temperature")
+    	if (temp.isNumber() ) temps += [temp]
+    }
+    log.debug "temps: ${temps}" 
+    if (temps.size() < 2) {				// ignore if we don't have enough valid data
+    	atomicState.amIRunning = false
+        return 
+    }
     // Makes no sense to change fanMinOnTime while heating, cooling or fan only is running - take action ONLY on events while idle
     def statState = theThermostat.currentValue("thermostatOperatingState")
     if (statState != 'idle') {
     	log.debug("${theThermostat} is ${statState}, no adjustments made")
+        atomicState.amIRunning = false
         return
     }
     
@@ -135,55 +149,49 @@ def deltaHandler(evt=null) {
         def timeNow = now()
         if (timeNow <= (atomicState.lastAdjustment + (60000 * settings.fanAdjustMinutes))) {
             log.debug("Not time to adjust yet")
+            atomicState.amIRunning = false
             return
 		}
 	}
-
-	def temps = [] 
-    theSensors.each {
-    	def temp = it.currentValue("temperature")
-    	if (temp.isNumber() ) temps += [temp]
-    }
-    log.debug "temps: ${temps}"
-    if (temps.size() < 2) return // ignore if we don't have enough valid data
     
 	Double min = temps.min().toDouble()
 	Double max = temps.max().toDouble()
 	Double delta = max - min
+    
 	Integer currentOnTime = theThermostat.currentValue("fanMinOnTime").toInteger()
 	Integer newOnTime = currentOnTime
 	
-	if (delta > settings.deltaTemp) {			// need longer recirculation
-		if (currentOnTime < settings.maxOnTime) {
-			newOnTime = currentOnTime + settings.fanOnTimeDelta
-			if (newOnTime > settings.maxFanOnTime) {
-				newOnTime = settings.maxFanOnTime
-			}
-			if (currentOnTime != newOnTime) {
-				log.debug "Increasing circulation time for ${theThermostat} to ${newOnTime} minutes"
-				theThermostat.setFanMinOnTime(newOnTime)
-				atomicState.lastAdjustment = now()
-                return
-			}
+	if (delta > settings.deltaTemp.toDouble()) {			// need longer recirculation
+		newOnTime = currentOnTime + settings.fanOnTimeDelta
+		if (newOnTime > settings.maxFanOnTime) {
+			newOnTime = settings.maxFanOnTime
+		}
+		if (currentOnTime != newOnTime) {
+			log.debug "Delta is ${String.format("%.2f",delta)}/${String.format("%.2f",settings.deltaTemp)}, increasing circulation time for ${theThermostat} to ${newOnTime} minutes"
+			theThermostat.setFanMinOnTime(newOnTime)
+			atomicState.lastAdjustment = now()
+            atomicState.amIRunning = false
+            return
 		}
 	} else {
         Double target = (getTemperatureScale() == "C") ? 0.5556 : 1.0
-    	if ((max - min) < target) {			// stop adjusting once we get within 1F or .5C
-			if (currentOnTime > settings.minOnTime) {
-				newOnTime = currentOnTime - settings.fanOnTimeDelta
-				if (newOnTime < settings.minFanOnTime) {
-					newOnTime = settings.minFanOnTime
-				}
-                if (currentOnTime != newOnTime) {
-            		log.debug "Decreasing circulation time for ${theThermostat} to ${newOnTime} minutes"
-					theThermostat.setFanMinOnTime(newOnTime)
-					atomicState.lastAdjustment = now()
-                    return
-                }
+        if (target > settings.deltaTemp) target = settings.deltaTemp * 0.95	// arbitrary - we have to be less than deltaTemp
+    	if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5C
+			newOnTime = currentOnTime - settings.fanOnTimeDelta
+			if (newOnTime < settings.minFanOnTime) {
+				newOnTime = settings.minFanOnTime
+			}
+            if (currentOnTime != newOnTime) {
+           		log.debug "Delta is ${String.format("%.2f",delta)}/${String.format("%.2f",target)}, decreasing circulation time for ${theThermostat} to ${newOnTime} minutes"
+				theThermostat.setFanMinOnTime(newOnTime)
+				atomicState.lastAdjustment = now()
+                atomicState.amIRunning = false
+                return
             }
 		}
 	}
 	log.debug "No adjustment required"
+    atomicState.amIRunning = false
 }
 
 // Helper Functions
