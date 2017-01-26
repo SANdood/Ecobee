@@ -42,7 +42,10 @@ private def getHelperSmartApps() {
                 title: "Create new Routines Handler..."], 
 			[name: "ecobeeContactsChild", appName: "ecobee Open Contacts",  
             	namespace: "smartthings", multiple: true, 
-                title: "Create new Open Contacts SmartApp..."],   
+                title: "Create new Open Contacts SmartApp..."],
+            [name: "ecobeeCirculationChild", appName: "ecobee Smart Circulation",
+			 	namespace: "smartthings", multiple: true,
+			 	title: "Create new Smart Circulation Handler..."],
 			[name: "ecobeeZonesChild", appName: "ecobee Smart Zones",
 			 	namespace: "smartthings", multiple: true,
 			 	title: "Create new Smart Zone Handler..."]
@@ -1913,7 +1916,8 @@ def updateThermostatData() {
             	hasHumidifier: hasHumidifier,
 				hasDehumidifier: hasDehumidifier,
                 heatDifferential: String.format("%.${settings.tempDecimals}f", tempHeatDiff),
-                coolDifferential: String.format("%.${settings.tempDecimals}f", tempCoolDiff),                
+                coolDifferential: String.format("%.${settings.tempDecimals}f", tempCoolDiff),
+                fanMinOnTime: atomicState.settings[tid].fanMinOnTime.toInteger(),
 			]
 		}
 		
