@@ -1195,12 +1195,13 @@ def pollChildren(child = null) {
     	d?.each() { oneChild ->
     		LOG("pollChildren() - Processing poll data for child: ${oneChild} has ${oneChild.capabilities}", 4)
         
-    		if( oneChild.hasCapability("Thermostat") ) {
+        	//note that all children may NOT have pending data in atomicState.thermostats, since we only update objects that change 
+    		if( oneChild.hasCapability("Thermostat") && (atomicState.thermostats[oneChild.device.deviceNetworkId]?.data)) {
         		// We found a Thermostat, send all of its events
-            	LOG("pollChildren() - We found a Thermostat!", 5)
+            	LOG("pollChildren() - We found a Thermostat with data!", 5)
             	oneChild.generateEvent(atomicState.thermostats[oneChild.device.deviceNetworkId]?.data)
-        	} else {
-        		// We must have a remote sensor
+        	} else if (atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data) {
+        		// We must have a remote sensor with updated data (note, note ALL of our child sensors are updated every time
             	LOG("pollChildren() - Updating sensor data for ${oneChild}: ${oneChild.device.deviceNetworkId} data: ${atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data}", 4)
             	oneChild.generateEvent(atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data)
 			}
@@ -1209,6 +1210,8 @@ def pollChildren(child = null) {
     return results
 }
 
+// NOTE: This only updated the apiConnected state now - used to resend all the data, but that's pretty much a waste of CPU cycles now.
+// 		 If the UI needs updating, the refresh now does a forcePoll on the entire device.
 private def generateEventLocalParams() {
 	// Iterate over all the children
     LOG("generateEventLocalParams() - sending cached data", 3, "", "info")
@@ -1219,12 +1222,18 @@ private def generateEventLocalParams() {
     	if( oneChild.hasCapability("Thermostat") ) {
         	// We found a Thermostat, send local params as events
             LOG("generateEventLocalParams() - We found a Thermostat!", 4)
+            def connected = apiConnected()
             def data = [
-            	apiConnected: apiConnected()
+            	apiConnected: connected
             ]
             
-            atomicState.thermostats[oneChild.device.deviceNetworkId]?.data?.apiConnected = apiConnected()            
-            oneChild.generateEvent(data)
+            // Update the API connected state for ALL the associated thermostats
+            // Note that we can't modify a Map element in atomicState directly - we have to read to a local variable, modify, then write it back
+            // atomicState.thermostats[oneChild.device.deviceNetworkId]?.data?.apiConnected = apiConnected() 
+            Map tempData = atomicState.thermostats
+            tempData[oneChild.device.deviceNetworkId]?.data?.apiConnected = connected
+            atomicState.thermostats = tempData
+            if (data) oneChild.generateEvent(data)
         } else {
         	// We must have a remote sensor
             LOG("generateEventLocalParams() - Updating sensor data: ${oneChild.device.deviceNetworkId}", 4)
