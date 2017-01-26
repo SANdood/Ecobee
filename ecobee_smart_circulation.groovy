@@ -17,15 +17,12 @@
 def getVersionNum() { return "0.1.0" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
-/*
-
- */
 
 definition(
 	name: "ecobee Smart Circulation",
 	namespace: "smartthings",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "If a larger than configured delta is found between sensors the fan circulation time will be increased by 5 minutes every hour.",
+	description: "If a larger than configured delta is found between sensors the fan circulation time will be automatically adjusted.",
 	category: "Convenience",
 	parent: "smartthings:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -47,7 +44,7 @@ def mainPage() {
         
         section(title: "Select Thermostat") {
         	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-        	input (name: "theThermostat", type:"capability.Thermostat", title: "Pick Ecobee Thermostat(s)", required: true, 
+        	input (name: "theThermostat", type:"capability.thermostat", title: "Pick Ecobee Thermostat", required: true, 
 				   multiple: false, submitOnChange: true)            
 		}
         section(title: "Circulation Time Settings") {
@@ -62,14 +59,13 @@ def mainPage() {
         }
         
         section(title: "Select Temperature Sensors") {
-        	// Settings option for using Mode or Routine
-            input(name: "theSensors", title: "Pick temperature sensor(s)", type: "capability.Temperature Measurement", 
+            input(name: "theSensors", title: "Pick temperature sensor(s)", type: "capability.temperatureMeasurement", 
 				  required: true, multiple: true, submitOnChange: true)
 		}
 		
 		section(title: "Max Temperature Delta" ){
             input(name: "deltaTemp", type: "decimal", title: "Enter temperature delta for making adjustments", required: true,
-				  defaultValue: "2.0", description: "2.0", range "1..9")
+				  defaultValue: "2.0", description: "2.0"/*, range "1..9"*/)
         }
        
 		section([mobileOnly:true]) {
@@ -98,6 +94,7 @@ def updated() {
 	unsubscribe()
     
     //verify state variable
+    atomicState.lastAdjustment = now() - (3601 * settings.fanAdjustMinutes.toLong()).toLong()
     initialize()
 }
 
@@ -109,14 +106,16 @@ def initialize() {
     	LOG("Temporarily Disabled as per request.", 2, null, "warn")
     	return true
     }
-	
-    atomicState.lastAdjustment = null
     
-    subscribe(theThermostats, "thermostatOperatingState", deltaHandler)
+    subscribe(theThermostat, "thermostatOperatingState", deltaHandler)
+    log.debug "theThermostat: ${theThermostat}, fanMinOnTime: ${theThermostat.currentValue('fanMinOnTime')}"
     subscribe(theSensors, "temperature", deltaHandler)
 	subscribe(location, "mode", deltaHandler)
 
-    LOG("initialize() complete", 3)
+	if (theThermostat.currentValue("fanMinOnTime").toInteger() < settings.minFanOnTime) settings.theThermostat.setFanMinOnTime( settings.minFanOnTime )
+      
+    LOG("initialize() complete")
+    runIn( 5, deltaHandler )
 }
 
 def deltaHandler(evt=null) {
@@ -126,36 +125,42 @@ def deltaHandler(evt=null) {
         def timeNow = now()
         if (timeNow <= (atomicState.lastAdjustment + (3600*settings.fanAdjustMinutes))) {
             LOG("Not time to adjust yet",3)
-            return null
+            return
 		}
 	}
 
-	Double temps = theSensors?.currentValue("temperature").toDouble()
-	Double min = temps.min()
-	Double max = temps.max()
+	def temps = [] 
+    theSensors.each {
+    	if (it.currentValue("temperature").isNumber() ) temps += [it.currentValue("temperature")]
+    }
+    log.debug "temps: ${temps}"
+	Double min = temps.min().toDouble()
+	Double max = temps.max().toDouble()
 	Double delta = max - min
-	Integer currentOnTime = theThermostat.getFanMinOnTime.toInteger()
-	Ineteger newOnTime = currentOnTime
+	Integer currentOnTime = theThermostat.currentValue("fanMinOnTime").toInteger()
+	Integer newOnTime = currentOnTime
 	
 	def result = null
 	if (delta > settings.deltaTemp) {			// need longer recirculation
 		if (currentOnTime < settings.maxOnTime) {
 			newOnTime = currentOnTime + settings.fanOnTimeDelta
-			if (newOnTime > settings.maxOnTime) {
-				newOnTime = settings.maxOnTime
+			if (newOnTime > settings.maxFanOnTime) {
+				newOnTime = settings.maxFanOnTime
 			}
-			result = setFanMinOnTime( newOnTime.toString() )
-			log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
+            log.debug "theThermostat: ${theThermostat}, newOnTime: ${newOnTime}"
+			theThermostat.setFanMinOnTime(newOnTime)
+			// log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
 			atomicState.lastAdjustment = now()
 		}
 	} else if (delta < settings.deltaTemp) {
 		if (currentOnTime > settings.minOnTime) {
 			newOnTime = currentOnTime - settings.fanOnTimeDelta
-			if (newOnTime < settings.minOnTime) {
-				newOnTime = settings.minOnTime
+			if (newOnTime < settings.minFanOnTime) {
+				newOnTime = settings.minFanOnTime
 			}
-			result = setFanMinOnTime( newOnTime.toString() )
-			log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
+            log.debug "theThermostat: ${theThermostat}, newOnTime: ${newOnTime}"
+			theThermostat.setFanMinOnTime(newOnTime)
+			// log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
 			atomicState.lastAdjustment = now()
 		}
 	} else {
