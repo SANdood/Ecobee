@@ -126,28 +126,41 @@ def deltaHandler(evt=null) {
         def timeNow = now()
         if (timeNow <= (atomicState.lastAdjustment + (3600*settings.fanAdjustMinutes))) {
             LOG("Not time to adjust yet",3)
-            return
+            return null
 		}
 	}
 
 	Double temps = theSensors?.currentValue("temperature").toDouble()
+	Double min = temps.min()
+	Double max = temps.max()
+	Double delta = max - min
+	Integer currentOnTime = theThermostat.getFanMinOnTime.toInteger()
+	Ineteger newOnTime = currentOnTime
 	
-    2. Find the min, max & delta between all the subscribed thermometers
-    3. if delta > settings.deltaTemp
-    3a.     if current.fanMinOnTime.toInteger() < maxFanOnTime
-    3b.         new fanMinOnTime += 5settings.fanTimeDelta minutes
-    3c.         if (new.fanMinOnTime > settings.maxFanOnTime) 
-    3d.             new.FanMinOnTime = settings.maxfanOnTime
-    3e.         log the time of this change
-    4. else if (delta < deltaTemp)
-    4a.     if current.fanMinOnTime.toInteger() > minFanOnTime
-    4b.         new fanMinOnTime -= settings.fanTimeDelta minutes
-    4c.         if (new.fanMinOnTime < settings.minFanOnTime)
-    4d              new.fanMinOnTime = settings.minFanOnTime
-    4e.         log the time of this change
-    4f. else // gap has been closed, stop adjusting
-    
-    */
+	def result = null
+	if (delta > settings.deltaTemp) {			// need longer recirculation
+		if (currentOnTime < settings.maxOnTime) {
+			newOnTime = currentOnTime + settings.fanOnTimeDelta
+			if (newOnTime > settings.maxOnTime) {
+				newOnTime = settings.maxOnTime
+			}
+			result = setFanMinOnTime( newOnTime.toString() )
+			log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
+			atomicState.lastAdjustment = now()
+		}
+	} else if (delta < settings.deltaTemp) {
+		if (currentOnTime > settings.minOnTime) {
+			newOnTime = currentOnTime - settings.fanOnTimeDelta
+			if (newOnTime < settings.minOnTime) {
+				newOnTime = settings.minOnTime
+			}
+			result = setFanMinOnTime( newOnTime.toString() )
+			log.debug "setFanMinOnTime(${newOnTime}) result: ${result}"
+			atomicState.lastAdjustment = now()
+		}
+	} else {
+		log.debug "No adjustment required"
+	}
 }
 
 // Helper Functions
