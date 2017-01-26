@@ -1066,12 +1066,14 @@ def fanOff() {
 	setThermostatFanMode("off")
 }
 
-def setFanMinOnTime(minutes=10) {
+void setFanMinOnTime(minutes) {
 	LOG("setFanMinOnTime(${minutes})", 5, null, "trace")
     def deviceId = getDeviceId()
     
-    if ((minutes.toInteger() >=0) && (minutes.toInteger() <=  55)) {
-		parent.setFanMinOnTime(this, deviceId, minutes)
+	def howLong = 10
+	if (minutes.isNumber()) howLong = minutes
+    if ((howLong >=0) && (howLong <=  55)) {
+		parent.setFanMinOnTime(this, deviceId, howLong)
     } else {
     	LOG("setFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
     }
@@ -1320,20 +1322,26 @@ def generateStatusEvent() {
 
 	if (mode == "heat") {
 //		if (temperature >= heatingSetpoint) {
-		if (operatingState != "heating") {
+		if (operatingState == "fan only") {
+        	statusText = "Fan Only"
+        } else if (operatingState != "heating") {
 			statusText = "Idle (Heat)"
 		} else {
 			statusText = "Heating to ${heatingSetpoint}°"
 		}
 	} else if (mode == "cool") {
 //		if (temperature <= coolingSetpoint) {
-		if (operatingState != "cooling") {
+		if (operatingState == "fan only") {
+        	statusText = "Fan Only"
+		} else if (operatingState != "cooling") {
 			statusText = "Idle (Cool)"
 		} else {
 			statusText = "Cooling to ${coolingSetpoint}°"
 		}
 	} else if (mode == "auto") {
-    	if (operatingState == "heating") {
+		if (operatingState == "fan only") {
+        	statusText = "Fan Only"
+    	} else if (operatingState == "heating") {
         	statusText = "Heating to ${heatingSetpoint}° (Auto)"
         } else if (operatingState == "cooling") {
         	statusText = "Cooling to ${coolingSetpoint}° (Auto)"
