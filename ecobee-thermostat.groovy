@@ -65,6 +65,7 @@ metadata {
         command "setThermostatProgram"
         command "setFanMinOnTime"
         command "home"
+        command "present"
 
 // Unfortunately we cannot overload the internal definition of 'sleep()', and calling this will silently fail (actually, it does a
 // "sleep(0)")
@@ -881,7 +882,7 @@ def generateEquipmentStateEvent(equipStat) {
 	sendEvent( name: "equipmentOperatingState", value: equipStat, descriptionText: "Equipment is ${equipStat}", displayed: true)		 
 }
 
-def setThermostatMode(String value) {
+void setThermostatMode(String value) {
 	// 	"emergencyHeat" "heat" "cool" "off" "auto"
     
     if (value=="emergency" || value=="emergencyHeat") { value = "auxHeatOnly" }    
@@ -900,42 +901,44 @@ def setThermostatMode(String value) {
 	generateStatusEvent()
 }
 
-def off() {
+void off() {
 	LOG("off()", 5)
     setThermostatMode("off")    
 }
 
-def heat() {
+void heat() {
 	LOG("heat()", 5)
     setThermostatMode("heat")    
 }
 
-def auxHeatOnly() {
+void auxHeatOnly() {
 	LOG("auxHeatOnly()", 5)
     setThermostatMode("auxHeatOnly")
 }
 
-def emergency() {
-	auxHeatOnly()
+void emergency() {
+	LOG("emergency()", 5)
+    setThermostatMode("auxHeatOnly")
 }
 
 // This is the proper definition for the capability
-def emergencyHeat() {
-	auxHeatOnly()
+void emergencyHeat() {
+	LOG("emergencyHeat()", 5)
+    setThermostatMode("auxHeatOnly")
 }
 
-def cool() {
+void cool() {
 	LOG("cool()", 5)
     setThermostatMode("cool")    
 }
 
-def auto() {
+void auto() {
 	LOG("auto()", 5)
     setThermostatMode("auto")    
 }
 
 // Handle Comfort Settings
-def setThermostatProgram(program, holdType=null) {
+void setThermostatProgram(program, holdType=null) {
 	// Change the Comfort Setting to Home
     LOG("setThermostatProgram: program: ${program}  holdType: ${holdType}", 4)
 	def deviceId = getDeviceId()    
@@ -969,13 +972,18 @@ def setThermostatProgram(program, holdType=null) {
 	generateStatusEvent()    
 }
 
-def home() {
+void home() {
 	// Change the Comfort Setting to Home
     LOG("home()", 5)
     setThermostatProgram("Home")
 }
 
-def away() {
+void present(){
+	// Change the Comfort Setting to Home (Nest compatibility)
+    LOG("present()", 5)
+    setThermostatProgram("Home")
+}
+void away() {
 	// Change the Comfort Setting to Away
     LOG("away()", 5)
     setThermostatProgram("Away")
@@ -988,13 +996,13 @@ def away() {
     setThermostatProgram("Sleep")
 }
 */
-def asleep() {
+void asleep() {
 	// Change the Comfort Setting to Sleep    
     LOG("asleep()", 5)
     setThermostatProgram("Sleep")
 }
 
-def night() {
+void night() {
 	// Change the Comfort Setting to Sleep    
     LOG("night()", 5)
     setThermostatProgram("Sleep")
