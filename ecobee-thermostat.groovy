@@ -575,12 +575,12 @@ def generateEvent(Map results) {
 				if (isChange) event = eventFront + [value: sendValue, isStateChange: true, displayed: true]
 				if (name=="temperature") {
 					// Generate the display value that will preserve decimal positions ending in 0
-					def precision = device.currentValue("decimalPrecision")
+					Integer precision = device.currentValue("decimalPrecision").toInteger()
                     if (!precision) precision = (getTemperatureScale() == "C") ? 1 : 0
                     if (precision == 0) {
-                    	tempDisplay = Math.round(value.toDouble())
+                    	tempDisplay = value.toDouble().round(0)
                     } else {
-						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision.toInteger())) + '°'
+						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision)) + '°'
                     }
 				}
 			} else if (name=="heatMode" || name=="coolMode" || name=="autoMode" || name=="auxHeatMode") {
