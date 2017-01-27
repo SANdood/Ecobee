@@ -26,11 +26,16 @@ This work represents a significant overhaul of the aforemention prior implementa
 * <b>User Interface Enhancements</b>
   * Thermostat devices
     * For systems with heat pumps, multiple heating stages and/or multiple cooling stages, the thermostat device UI will show which device (heat pump/emergency heat) or stage (heat 1/heat 2/cool 1/cool 2) is in operation. Single-stage, non-heat pump devices will show only heating/cooling, and heat pump configurations will properly identify auxHeat as "emergency" heat in the UI;
+    * For systems with a humidifier or a dehumidifier the heat and cool icons include an indicator when these are running, and icons are also provided for humidifier and dehumidifier-only operation (where applicable).
+      * NOTE: the ecobee3 can only support either a humidifier or a dehumidifier (or a ventilator), while other Smart thermostats can support multiple at the same time. This new thermostat device should handle all combinations EXCEPT HRV/ERV ventilators are not currently supported.
     * The aforementioned change to Last Poll display based upon debugLevel to reduce data transferred from the SmartApp to the thermostat device has the side benefit of virtually eliminating the "chatter" in the devices' "Recent" message log in the Mobile App. This makes it easier to review when various data element changes were reported to the UI.
+    * Colors for the background of the main multiAttributeTile have been updated to mimic the colors of the ecobee3 thermostat and web/mobile app UI colors (e.g. flame orange for heating, snowflake blue for cooling, pale green for idle, and a purple/magenta for idle.
+    * A status line has been added below the status icons and before the Command Center to report when the currently running hold ends.
+    * Weather icon colors and a few other have also been updated to reflect the ecobee3 thermostat colors (instead of monochromatic blue).
   * Sensor devices
     * A new multiAttributeTile replaces the old presentation, with temperature as the primary display value, and motion displayed in the bottom left corner;
   * All devices
-    * Now has the ability to display 0, 1 or 2 decimal places of precision for thermostats and sensors. The default for metric locales is 1 decimal place (e.g. 25.2°) and for imperial locales is 0 (e.g., 71°). These defaults can be overridded in the preferences section Ecobee (Connect) SmartApp, and changes take effect from that point on;
+    * Now have the ability to display 0, 1 or 2 decimal places of precision for thermostats and sensors. The default for metric locales is 1 decimal place (e.g. 25.2°) and for imperial locales is 0 (e.g., 71°). These defaults can be overridded in the preferences section Ecobee (Connect) SmartApp, and changes take effect from that point on;
       * NOTE: Currently, changing the display precision also changes the value maintained internally for the SmartThings temperature attributes. This may be changed in the future such that full precision is always maintained internally, and only the display precision is configurable.
       
 * <b>Operational Enhancements</b>
