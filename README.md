@@ -12,9 +12,9 @@ This work represents a significant overhaul of the aforemention prior implementa
     * Do a lightweight <code>"thermostatSummary"</code> poll to determine which thermostat objects have changed (and for which thermostats, if there are more than one) since the last time data was retrieved from the API. The only two objects of interest to this implementation are:
      * <code>thermostat: settings, programs, events, <strike>devices</strike></code>
      * <code>runtime: runtime (temperatures, humidity, etc.), equipmentStatus, remoteSensors, weather</code>
-       * The <code>remoteSensors</code> object is only requested if one or more sensors have been selected in the configuration (including showing thermostats as sensors)
-       * The <code>weather</code> object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes)
-       * This implementation does not use the <code>devices</code>, <code>alerts</code>, or <code>extendedRuntime</code> objects, and therefore never requests them
+        * The <code>remoteSensors</code> object is only requested if one or more sensors have been selected in the configuration (including showing thermostats as sensors)
+        * The <code>weather</code> object does not change as frequently as the runtime object, so it specifically is requested less often than the rest of the objects represented by thermostatSummary(runtime) - (every 15 minutes)
+        * This implementation does not use the <code>devices</code>, <code>alerts</code>, or <code>extendedRuntime</code> objects, and therefore never requests them
     * It will then call the Ecobee API to request only the data objects that have indicated changes, and only for the thermostats that have changed (in cases where multiple thermostats are being used);
       * In particular, the <code>thermostat</code> object rarely changes, yet it can represent more than 6000 bytes of data for each thermostat. Not requesting this on every call makes a massive difference...
   
