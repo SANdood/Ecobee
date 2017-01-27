@@ -1684,7 +1684,6 @@ def updateThermostatData() {
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation
             
 			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].actualTemperature.toDouble() / 10.0), "F", apiPrecision /*settings.tempDecimals.toInteger()*/)
-            log.debug "tempTemperature ${tempTemperature}"
             Double tempHeatAt = atomicState.runtime[tid].desiredHeat.toDouble()
             Double tempCoolAt = atomicState.runtime[tid].desiredCool.toDouble()
             if (equipStatus.size() == 0) {											// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
