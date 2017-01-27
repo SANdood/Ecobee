@@ -137,9 +137,9 @@ def deltaHandler(evt=null) {
     	atomicState.amIRunning = false
         return 
     }
-    // Makes no sense to change fanMinOnTime while heating, cooling or fan only is running - take action ONLY on events while idle
+    // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
     def statState = theThermostat.currentValue("thermostatOperatingState")
-    if (statState != 'idle') {
+    if ((statState != 'idle')&&(statState != 'fan only')) {
     	log.debug("${theThermostat} is ${statState}, no adjustments made")
         atomicState.amIRunning = false
         return
