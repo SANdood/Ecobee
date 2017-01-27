@@ -1632,8 +1632,10 @@ def updateThermostatData() {
 	atomicState.timeOfDay = getTimeOfDay()
 	def runtimeUpdated = atomicState.runtimeUpdated
     def thermostatUpdated = atomicState.thermostatUpdated
-	def usingMetric = wantMetric() // cache the value to save the function calls
+	boolean usingMetric = wantMetric() // cache the value to save the function calls
 	def forcePoll = atomicState.forcePoll
+    Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
+    Integer userPrecision = settings.tempDecimals.toInteger()	// user's requested display precision
     
 	// Create the list of thermostats and related data
 	// def i = 0
@@ -1651,12 +1653,10 @@ def updateThermostatData() {
         
     // Handle things that only change when runtime object is updated)
         def occupancy = "not supported"
-        def tempTemperature
-        def tempHeatingSetpoint
-        def tempCoolingSetpoint
-        def tempWeatherTemperature
-		Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
-        Integer userPrecision = settings.tempDecimals.toInteger()	// user's requested display precision
+        Double tempTemperature
+        Double tempHeatingSetpoint
+        Double tempCoolingSetpoint
+        Double tempWeatherTemperature
         
         if (forcePoll || runtimeUpdated) {
 			// Occupancy (motion)
@@ -1684,6 +1684,7 @@ def updateThermostatData() {
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation
             
 			tempTemperature = myConvertTemperatureIfNeeded( (atomicState.runtime[tid].actualTemperature.toDouble() / 10.0), "F", apiPrecision /*settings.tempDecimals.toInteger()*/)
+            log.debug "tempTemperature ${tempTemperature}"
             Double tempHeatAt = atomicState.runtime[tid].desiredHeat.toDouble()
             Double tempCoolAt = atomicState.runtime[tid].desiredCool.toDouble()
             if (equipStatus.size() == 0) {											// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
@@ -1721,10 +1722,10 @@ def updateThermostatData() {
 			heatRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(5..25)" : "(40..80)"
 			coolRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(18..35)" : "(65..95)"
 			
-			heatHigh = (atomicState.settings[tid].heatRangeHigh.toDouble() / 10.0).round(settings.tempDecimals.toInteger())
-			heatLow = (atomicState.settings[tid].heatRangeLow.toDouble() / 10.0).round(settings.tempDecimals.toInteger())
-			coolHigh = (atomicState.settings[tid].coolRangeHigh.toDouble() / 10.0).round(settings.tempDecimals.toInteger())
-			coolLow = (atomicState.settings[tid].coolRangeLow.toDouble() / 10.0).round(settings.tempDecimals.toInteger())
+			heatHigh = (atomicState.settings[tid].heatRangeHigh.toDouble() / 10.0).round(userPrecision)
+			heatLow = (atomicState.settings[tid].heatRangeLow.toDouble() / 10.0).round(userPrecision)
+			coolHigh = (atomicState.settings[tid].coolRangeHigh.toDouble() / 10.0).round(userPrecision)
+			coolLow = (atomicState.settings[tid].coolRangeLow.toDouble() / 10.0).round(userPrecision)
 			
 			// calculate these anyway (for now) - it's easier to read the range while debugging
 			if (heatLow && heatHigh) heatRange = "(${Math.round(heatLow)}..${Math.round(heatHigh)})"
@@ -1928,15 +1929,15 @@ def updateThermostatData() {
 				auxHeatMode: auxHeatMode,
             	hasHumidifier: hasHumidifier,
 				hasDehumidifier: hasDehumidifier,
-                heatDifferential: String.format("%.2f", tempHeatDiff),
-                coolDifferential: String.format("%.2f", tempCoolDiff),
+                heatDifferential: String.format("%.${apiPrecision}f", tempHeatDiff.toDouble().round(apiPrecision)),
+                coolDifferential: String.format("%.${apiPrecision}f", tempCoolDiff.toDouble().round(apiPrecision)),
                 fanMinOnTime: atomicState.settings[tid].fanMinOnTime.toInteger(),
 			]
 		}
 		
 		if (forcedPoll || atomicState.runtimeUpdated) {
 			data += [            
-				temperature:  String.format("%.{apiPrecision}f", tempTemperature), 											// ALWAYS send full apiPrecision - let device tile truncate/adjust
+				temperature:  String.format("%.${apiPrecision}f", tempTemperature.toDouble().round(apiPrecision)), 											// ALWAYS send full apiPrecision - let device tile truncate/adjust
 				heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint.toDouble().round(userPrecision)), // The other temps we'll adjust here
 				coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint.toDouble().round(userPrecision)), 
 				thermostatFanMode: currentFanMode,
