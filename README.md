@@ -49,10 +49,11 @@ This work represents a significant overhaul of the aforemention prior implementa
    * Send a notification to the location's notification log explaining what was done
    * If current program is already the requested program, and we aren't in a hold, then leave it alone
    * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply <code>resumeProgram(resumeAll=true)</code>
+ * New <b>Smart Circulation</b> Handler: mimics the latent (not yet enabled) ecobee3 function of the same name. Monitors the temperature across 2 or more sensors (not necessarily ecobee sensors - ANY ST thermometer will do), and if the temperature delta between the highest and lowest reading is greater than a configurable range, increases the minimum fan on time (automated circulation). Reduces the fanMinOnTime again when min/max temperatures are within 1F/0.5C of each other. Minimum and maximum fan circulation time (minutes per hour) and frequency of updating are also configurable.
  * New <b>Smart Zone</b> Handler: attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC fan isn't run independently for each zone (thereby reducing electricity demand). 
-  * Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). 
-    * NOTE: this will create a temporary hold state ('Hold: Fan') on the slave thermostat(s)
-  * When the master switches to 'idle', 'heat' or 'cool', the slave program is resumed - <i>i.e.</i>, the Hold: Fan is popped off the hold stack
+   * Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). 
+     * NOTE: this will create a temporary hold state ('Hold: Fan') on the slave thermostat(s)
+    * When the master thermostat returns to 'idle', 'heat' or 'cool', the slave program is resumed - <i>i.e.</i>, the Hold: Fan is popped off the hold stack
  
 * <b>Other Miscellaneous Enhancements</b>
   * SmartApp Name: it is now possible to rename each instance of the Ecobee (Connect) SmartApp. This is useful for those with multiple locations/hubs.
