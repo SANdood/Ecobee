@@ -118,6 +118,7 @@ def initialize() {
 
 	if (theThermostat.currentValue("fanMinOnTime").toInteger() < settings.minFanOnTime) settings.theThermostat.setFanMinOnTime( settings.minFanOnTime )
     
+    runEvery5Minutes(deltaHandler)		// set up a regular poll, just in case things get too quiet :)
     deltaHandler()
     LOG("initialize() complete")
 }
