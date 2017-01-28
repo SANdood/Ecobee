@@ -12,11 +12,16 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  * 
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com)
+ *	Updated: 2017-01-28
+ *	https://github.com/SANdood/Ecobee/
+ *
  *  See Changelog for change history
  *
+ *	0.10.1 - Beta release of Barry's enhanced version
  */
 
-def getVersionNum() { return "0.9.8" }
+def getVersionNum() { return "0.10.1" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}-RC8" }
 
 metadata {
