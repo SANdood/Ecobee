@@ -4,6 +4,8 @@ This updated and enhanced version of the Ecobee thermostat support for SmartThin
 
 I hereby contribute my edits and additions to the same Open Source domain as the prior works noted above. (Open Source descriptions here). I attest that my edits and modifications are solely my own original work, and not derived, copied or replicated from other non-open source works. Any similarity to other works is therefore a product of development using the Ecobee API and the SmartThings development environment, which independently and together define a narrow band of operational leeway in order to successfully interface with the two environments.
 
+<b>IMPORTANT!</b> Before installing and using my enhanced version, I <i>strongly encourage</i> you to review the most excellent documentation written by @StrykerSKS for his updates. You can find it here: https://github.com/StrykerSKS/SmartThingsPublic/blob/StrykerSKS-Ecobee3/smartapps/smartthings/ecobee-connect.src/README.md
+
 Notable Enhancements and Changes
 --------------------------------
 This work represents a significant overhaul of the aforemention prior implementation. Most notable of these include:
