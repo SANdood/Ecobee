@@ -13,8 +13,12 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *  Written by Barry A. Burke (storageanarchy@gmail.com)
+ *  Written: 2017-01-28
+ *	https://github.com/SANdood/Ecobee/
+ *	0.1.1 -	Beta Release
  */
-def getVersionNum() { return "0.1.0" }
+def getVersionNum() { return "0.1.1" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
 /*
