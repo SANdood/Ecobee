@@ -33,6 +33,7 @@ This work represents a significant overhaul of the aforemention prior implementa
     * The aforementioned change to Last Poll display based upon debugLevel to reduce data transferred from the SmartApp to the thermostat device has the side benefit of virtually eliminating the "chatter" in the devices' "Recent" message log in the Mobile App. This makes it easier to review when various data element changes were reported to the UI.
     * Colors for the background of the main multiAttributeTile have been updated to mimic the colors of the ecobee3 thermostat and web/mobile app UI colors (e.g. flame orange for heating, snowflake blue for cooling, pale green for idle, and a purple/magenta for idle.
     * A status line has been added below the status icons and before the Command Center to report when the currently running hold ends.
+    * To the right of the above Hold Status, a small display shows the current setting of fanMinOnTime - the number of minutes the fan should run each hour, whether while in heat/cool, or fan only. This is usually set on the thermostat, and can be specified for Vacation modes; the new Smart Circulation Helper App can now dynamically change this based on the temperature delta between two sensors. See below for more information.
     * Weather icon colors and a few other have also been updated to reflect the ecobee3 thermostat colors (instead of monochromatic blue).
   * Sensor devices
     * A new multiAttributeTile replaces the old presentation, with temperature as the primary display value, and motion displayed in the bottom left corner;
@@ -59,7 +60,7 @@ This work represents a significant overhaul of the aforemention prior implementa
  * New <b>Smart Circulation</b> Handler: mimics the latent (not yet enabled) ecobee3 function of the same name. Monitors the temperature across 2 or more sensors (not necessarily ecobee sensors - ANY ST thermometer will do), and if the temperature delta between the highest and lowest reading is greater than a configurable range, increases the minimum fan on time (automated circulation). Reduces the fanMinOnTime again when min/max temperatures are within 1F/0.5C of each other. Minimum and maximum fan circulation time (minutes per hour) and frequency of updating are also configurable.
  * New <b>Smart Zone</b> Handler: attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC fan isn't run independently for each zone (thereby reducing electricity demand). 
    * Any time the 'master' zone is running 'fan only', Smart Zone will turn on the fans in the slave zone(s). 
-     * NOTE: this will create a temporary hold state ('Hold: Fan') on the slave thermostat(s)
+     * NOTE: this will create a temporary hold state ('Hold: Fan') on the slave thermostat(s), which will be cleared after the fan override completes.
     * When the master thermostat returns to 'idle', 'heat' or 'cool', the slave program is resumed - <i>i.e.</i>, the Hold: Fan is popped off the hold stack
  
 * <b>Other Miscellaneous Enhancements</b>
