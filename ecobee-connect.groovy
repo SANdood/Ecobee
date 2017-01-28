@@ -24,6 +24,10 @@
  *      StrykerSKS - 12-11-2015 - Make it work (better) with the Ecobee 3
  *		BAB - 01-20-2017 - Massive overhaul for efficiency, performance, bug fixes and UI enhancements
  *
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com)
+ * 	Date: 2017-01-28
+ *	https://github.com/SANdood/Ecobee
+ *
  *  See Changelog for change history
  *
  * 	0.9.18 - Fix customer Program handling
@@ -31,9 +35,11 @@
  *  0.9.20 - Allow installations where no "location" is set. Useful for virtual hubs and testing
  *	10.1.1 - Massive overhaul (see https://github.com/SANdood/Ecobee)
  *	10.1.2 - Added Smart Zone helper app
+ *	10.1.3 - Added Smart Circulation helper app
+ *	10.1.4 - Beta Release of Barry's updated version
  *
  */  
-def getVersionNum() { return "0.10.2" }
+def getVersionNum() { return "0.10.4" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -2169,12 +2175,18 @@ def setHVACMode(child, deviceId, mode) {
 
 def setFanMinOnTime(child, deviceId, howLong) {
 	LOG("setFanMinOnTime(${howLong})", 4, child)
+    
+    if ((howLong.toInteger() < 0) || howLong.toInteger() > 60) {
+    	LOG("setFanMinOnTime(${child}) - Invalid Argument ${howLong}",4,child,'warn')
+        return false
+    }
+    
     def thermostatSettings = ',"thermostat":{"settings":{"fanMinOnTime":'+howLong+'}}'
     def thermostatFunctions = ''
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("setFanMinOnTime(child) with result ${result}", 3, child)    
+    LOG("setFanMinOnTime(${child}) with result ${result}", 3, child)    
 
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
