@@ -13,8 +13,13 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *	Updated by Barry A. Burke (storageanarchy@gmail.com)
+ *	Updated 2017-01-28
+ *  https://github.com/SANdood/Ecobee/
+ *
+ *	0.1.6 - Beta release of Barry's version
  */
-def getVersionNum() { return "0.1.5" }
+def getVersionNum() { return "0.1.6" }
 private def getVersionLabel() { return "ecobee Routines Version ${getVersionNum()}" }
 
 /*
