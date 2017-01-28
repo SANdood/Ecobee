@@ -1,5 +1,7 @@
 Installation Instructions
 =========================
+<b>IMPORTANT!</b> Before installing and using my enhanced version, I <i>strongly encourage</i> you to review the most excellent documentation written by @StrykerSKS for his updates. You can find it here: https://github.com/StrykerSKS/SmartThingsPublic/blob/StrykerSKS-Ecobee3/smartapps/smartthings/ecobee-connect.src/README.md
+
 If you have been using an earlier version of the ecboee Device Handler, either the original from SmartThings or the 
 updated version from SKStryker, <b>your best bet is to remove those devices and SmartApps from your environment</b>
 before installing this version.
