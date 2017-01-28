@@ -20,16 +20,19 @@
  * 	Updates by Sean Kendall Schneyer <smartthings@linuxbox.org>
  * 	Date: 2015-12-23
  *
+ *	Updates by Barry A. Burke (storageanarchy@gmail.com)
+ *  https://github.com/SANdood/Ecobee
  *
  *  See Changelog for change history 
  *
  * 	0.9.12 - Fix for setting custom Thermostat Programs (Comfort Settings)
  *	0.9.13 - Add attributes to indicate custom program names to child thermostats (smart1, smart2, etc)
  * 	0.10.1 - Massive overhaul for performance, efficiency, improved UI, enhanced functionality
+ *	0.10.2 - Beta release of Barry's updated version
  *
  */
 
-def getVersionNum() { return "0.10.1" }
+def getVersionNum() { return "0.10.2" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
@@ -494,6 +497,9 @@ metadata {
         	state "default"
         }
         
+        valueTile("fanMinOnTime", "device.fanMinOnTime", width: 1, height: 1, decoration: "flat") {
+        	state "fanMinOnTime", /*"default",  action: "noOp", nextState: "default", */ label: 'Fan On\n${currentValue}m/hr'
+        }
         standardTile("commandDivider", "device.logo", inactiveLabel: false, width: 4, height: 1, decoration: "flat") {
         	state "default", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/command_divider.png"			
         }        
@@ -509,7 +515,7 @@ metadata {
             
         	/* "operatingState", */  "equipmentState", "weatherIcon",  "refresh",  
             "currentProgramIcon", "weatherTemperature", "motionState", 
-            "holdStatus", "oneBuffer", 
+            "holdStatus", "fanMinOnTime", 
             "modeShow", "fanModeLabeled",  "resumeProgram", 
             "oneBuffer", "commandDivider", "oneBuffer",
             "coolSliderControl", "coolingSetpoint",
@@ -1080,7 +1086,7 @@ void setFanMinOnTime(minutes) {
     
 	def howLong = 10
 	if (minutes.isNumber()) howLong = minutes
-    if ((howLong >=0) && (howLong <=  55)) {
+    if ((howLong >=0) && (howLong <=  60)) {
 		parent.setFanMinOnTime(this, deviceId, howLong)
     } else {
     	LOG("setFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
