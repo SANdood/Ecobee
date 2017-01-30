@@ -37,9 +37,11 @@
  *	10.1.2 - Added Smart Zone helper app
  *	10.1.3 - Added Smart Circulation helper app
  *	10.1.4 - Beta Release of Barry's updated version
+ *	10.1.5 - Bug Fixes by Barry
+ *				- display Vacation's event.fanOnTime if in Vacation hold
  *
  */  
-def getVersionNum() { return "0.10.4" }
+def getVersionNum() { return "0.10.5" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1438,7 +1440,6 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
  						if (stat.runtime) tempRuntime[tid] = stat.runtime
                         if (stat.remoteSensors) tempSensors[tid] = stat.remoteSensors // should be blank unless we requested it specifically
                         if (stat.weather) tempWeather[tid] = stat.weather
-
                     }
                 }
                 
@@ -1642,10 +1643,7 @@ def updateThermostatData() {
 	def forcePoll = atomicState.forcePoll
     Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
     Integer userPrecision = settings.tempDecimals.toInteger()	// user's requested display precision
-    
-	// Create the list of thermostats and related data
-	// def i = 0
-	
+
 	atomicState.thermostats = atomicState.thermostatData.thermostatList.inject([:]) { collector, stat ->
 		def dni = [ app.id, stat.identifier ].join('.')
         
@@ -1753,11 +1751,12 @@ def updateThermostatData() {
         def currentClimate = ""
         def currentFanMode = ""
         def statMode = atomicState.settings[tid].hvacMode
+        def fanMinOnTime = atomicState.settings[tid].fanMinOnTime
 		
 		// what program is supposed to be running now?
 		def scheduledClimateId = atomicState.program[tid].currentClimateRef
 		def scheduledClimateName = ""
-        def schedClimateRef
+        def schedClimateRef = ""
 		if (scheduledClimateId) { 
         		schedClimateRef = atomicState.program[tid].climates.find { it.climateRef == scheduledClimateId }
             	scheduledClimateName = schedClimateRef.name
@@ -1770,6 +1769,13 @@ def updateThermostatData() {
                 it.running == true
             }        	
 		}
+        
+        // store the currently running event (in case we need to modify or delete it later, as in Vacation handling)
+        def tempRunningEvent = [:]
+       	tempRunningEvent[tid] = runningEvent ? runningEvent : [:]
+        if (atomicState.runningEvent) tempRunningEvent = atomicState.runningEvent + tempRunningEvent
+        atomicState.runningEvent = tempRunningEvent
+            
 		def thermostatHold = ""
         String holdEndsAt = ""
         String tstatDate = stat.thermostatTime.take(10)
@@ -1798,6 +1804,7 @@ def updateThermostatData() {
                 }  // if we can't tell which hold is in effect, leave currentClimate, currentClimateName and currentClimateId blank/null/empty
 			} else if (runningEvent.type == "vacation" ) {
                	currentClimateName = "Vacation"
+                fanMinOnTime = runningEvent.fanMinOnTime
             } else if (runningEvent.type == "quickSave" ) {
                	currentClimateName = "Quick Save"                
             } else if (runningEvent.type == "autoAway" ) {
@@ -1936,7 +1943,7 @@ def updateThermostatData() {
 				hasDehumidifier: hasDehumidifier,
                 heatDifferential: String.format("%.${apiPrecision}f", tempHeatDiff.toDouble().round(apiPrecision)),
                 coolDifferential: String.format("%.${apiPrecision}f", tempCoolDiff.toDouble().round(apiPrecision)),
-                fanMinOnTime: atomicState.settings[tid].fanMinOnTime.toInteger(),
+                fanMinOnTime: fanMinOnTime,
 			]
 		}
 		
@@ -2176,7 +2183,7 @@ def setHVACMode(child, deviceId, mode) {
 def setFanMinOnTime(child, deviceId, howLong) {
 	LOG("setFanMinOnTime(${howLong})", 4, child)
     
-    if ((howLong.toInteger() < 0) || howLong.toInteger() > 60) {
+    if (!howLong.isNumber() || (howLong.toInteger() < 0) || howLong.toInteger() > 55) {
     	LOG("setFanMinOnTime(${child}) - Invalid Argument ${howLong}",4,child,'warn')
         return false
     }
@@ -2187,6 +2194,64 @@ def setFanMinOnTime(child, deviceId, howLong) {
 	
     def result = sendJson(child, jsonRequestBody)
     LOG("setFanMinOnTime(${child}) with result ${result}", 3, child)    
+
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
+    return result
+}
+
+def setVacationFanMinOnTime(child, deviceId, howLong) {
+	LOG("setVacationFanMinOnTime(${howLong})", 4, child)   
+    if (!howLong.isNumber() || (howLong.toInteger() < 0) || howLong.toInteger() > 55) {		// Documentation says 60 is the max, but the Ecobee3 thermostat maxes out at 55 (makes 60 = 0)
+    	LOG("setVacationFanMinOnTime(${child}) - Invalid Argument ${howLong}",4,child,'warn')
+        return false
+    }
+    
+    def evt = atomicState.runningEvent[deviceId]
+    def hasEvent = true
+    if (!evt) hasEvent = false						// no running event defined
+    if (evt.running != true) hasEvent = false		// shouldn't have saved it if it wasn't running
+    if (evt.type != "vacation") hasEvent = false	// we only override vacation fanMinOnTime setting
+  	if (!hasEvent) {
+    	LOG("setVacationFanMinOnTime() - Vacation is not currently active on thermostatId ${deviceId}", 4, child, 'warn')
+        return false
+    }
+    if (evt.fanMinOnTime.toInteger() == howLong.toInteger()) return true	// didn't need to do anything!
+    
+    if (deleteVacation(child, deviceId, evt.name)) { // apparently on order to change something in a vacation, we have to delete it and then re-create it..
+  
+    def thermostatSettings = ''
+    def thermostatFunctions = '{"type":"createVacation","params":{"name":"' + evt.name + '","coolHoldTemp":"' + evt.coolHoldTemp + '","heatHoldTemp":"' + evt.heatHoldTemp + 
+    							'","startDate":"' + evt.startDate + '","startTime":"' + evt.startTime + '","endDate":"' + evt.endDate + '","endTime":"' + evt.endTime + 
+                                '","fan":"' + evt.fan + '","fanMinOnTime":"' + "${howLong}" + '"}}'
+    def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
+	
+    LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 1, child, "info")
+    
+    def result = sendJson(child, jsonRequestBody)
+    LOG("setVacationFanMinOnTime(${child}) with result ${result}", 3, child) 
+
+	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
+    return result
+    }
+}
+
+def deleteVacation(child, deviceId, vacationName=null ) {
+	def vacaName = vacationName
+	if (!vacaName) {		// no vacationName specified, let's find out if one is currently running
+        def evt = atomicState.runningEvent[deviceId]
+    	if (!evt ||  (evt.running != true) || (evt.type != "vacation") || !evt.name) {
+    		LOG("deleteVacation() - Vacation is not currently active on thermostatId ${deviceId}", 4, child, 'warn')
+        	return false
+        }
+        vacaName = evt.name as String		// default names are Very Big Numbers
+    }
+
+    def thermostatSettings = ''
+    def thermostatFunctions = '{"type":"deleteVacation","params":{"name":"' + vacaName + '"}}'
+    def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
+	
+    def result = sendJson(child, jsonRequestBody)
+    LOG("deleteVacation(${child}) with result ${result}", 3, child) 
 
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
