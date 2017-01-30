@@ -20,7 +20,7 @@ re-authorize with Ecobee once after you get everything installed and published).
   * <code>ecobee-smart-zones.groovy</code>
   
 2. Save and 'Publish / For Me' each of the above. 
-<b>DO NOT try to run any of these until you have completed step 4 below!</b>
+<b>DO NOT try to run any of these until you have completed step 5 below!</b>
 
 3. For Ecobee (Connect) SmartApp, be sure to enable OAuth. In the IDE, while you have Ecobee (Connect) open, Click on "App Settings" (top right), then select the OAuth tab and enable OAuth.
 
