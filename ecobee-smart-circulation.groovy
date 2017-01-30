@@ -15,9 +15,10 @@
  *
  *	0.1.1	01/25/2017	Barry Burke -	Initial Release
  *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
+ *	0.1.3	01/29/2017	Barry Burke -	Added sonfigurable support for overriding fanMinOnTime during Vacation holds
  *
  */
-def getVersionNum() { return "0.1.2" }
+def getVersionNum() { return "0.1.3" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
 
@@ -61,16 +62,21 @@ def mainPage() {
 				  defaultValue: "2.0", /* description: "2.0", */ multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
             paragraph "Minimum Fan On minutes per hour (m/hr). Note: includes heating, cooling and fan only minutes."
             input (name: "minFanOnTime", type: "number", title: "Set minimum fan on m/hr (0-60)", required: true,
-				   defaultValue: "5", description: "5", range: "0..60", submitOnChange: true)
+				   defaultValue: "5", description: "5", range: "0..55", submitOnChange: true)
             paragraph "Maximum Fan On minutes per hour (m/hr)."
             input (name: "maxFanOnTime", type: "number", title: "Set maximum fan on m/hr (${minFanOnTime?minFanOnTime:0}-60)", required: true,
-				   defaultValue: "55", description: "55", range: '${minFanOnTime}..60', submitOnChange: true)
+				   defaultValue: "55", description: "55", range: '${minFanOnTime}..55', submitOnChange: true)
             paragraph "Adjust Fan On minutes per hour (m/hr) by this many minutes each adjustment."
             input (name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true,
 				   defaultValue: "5", description: "5", range: "1..20")
             paragraph "Minimum number of minutes between adjustments."
             input (name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true,
 				   defaultValue: "15", description: "15", range: "5..60")
+        }
+        
+        section(title: "Vacation Hold Override") {
+        	paragraph "The fan circulation setting is overridden when a Vacation is in effect. If you would like to automate the fan during a Vacation hold, enable this setting."
+            input(name: "vacationOverride", type: "boolean", title: "Override fan during Vacation hold?", defaulValue: false)
         }
        
 		section(mobileOnly:true, title: "Enable only for specific modes?") {
@@ -125,21 +131,40 @@ def initialize() {
     subscribe(location, "routineExecuted", deltaHandler)
 
 	Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()
+    boolean vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
+    
 	if (currentOnTime < settings.minFanOnTime) {
-    	settings.theThermostat.setFanMinOnTime(settings.minFanOnTime)
-        currentOnTime = settings.minFanOnTime
+    	if (vacationHold && settings.vacationOverride) {
+        	settings.theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
+            currentOnTime = settings.minFanOnTime
+        } else if (!vacationHold) {
+    		settings.theThermostat.setFanMinOnTime(settings.minFanOnTime)
+            currentOnTime = settings.minFanOnTime
+        }
     } else if (currentOnTime > settings.maxFanOnTime) {
-    	settings.theThermostat.setFanMinOnTime(settings.maxFanOnTime)
-        currentOnTime = settings.maxFanOnTime
+    	if (vacationHold && settings.vacationOverride) {
+        	settings.theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
+        	currentOnTime = settings.maxFanOnTime
+        } else if (!vacationHold) {
+    		settings.theThermostat.setFanMinOnTime(settings.maxFanOnTime)
+        	currentOnTime = settings.maxFanOnTime
+        }
     }
-    LOG("thermostat ${settings.theThermostat} circulation time is now ${currentOnTime} minutes/hour",2,"",'info')
+    def vaca = vacationHold ? " is in Vacation mode, " : " "    
+    LOG("thermostat ${settings.theThermostat}${vaca}circulation time is now ${currentOnTime} minutes/hour",2,"",'info')
 	atomicState.fanSinceLastAdjustment = true
 
-    deltaHandler()
+    if (!vacationHold) deltaHandler()
     LOG("Initialization complete", 4, "", 'trace')
 }
 
 def deltaHandler(evt=null) {
+	def vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
+	if (!settings.vacationOverride && vacationHold) {
+    	LOG("${settings.theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 4, "", 'warn')
+        return
+    }
+    
 	if (evt) {
         if ((evt.name == "thermostatOperatingState") && !atomicState.fanSinceLastAdjustment) {
     		if ((evt.value != 'idle') && (!evt.value.contains('ending'))) atomicState.fanSinceLastAdjustment = true
@@ -149,6 +174,7 @@ def deltaHandler(evt=null) {
     	LOG("deltaHandler() called directly", 4, "", 'trace')
     }
 
+
     if (atomicState.amIRunning) {return} else {atomicState.amIRunning = true}
     
     // parse temps - ecobee sensors can return "unknown", others may return
@@ -157,7 +183,7 @@ def deltaHandler(evt=null) {
     	def temp = it.currentValue("temperature")
     	if (temp.isNumber() && (temp > 0)) temps += [temp]	// we want to deal with valid inside temperatures only
     }
-    LOG("Current temperature readings: ${temps}", 3, "", 'trace')
+    LOG("Current temperature readings: ${temps}", 4, "", 'trace')
     if (temps.size() < 2) {				// ignore if we don't have enough valid data
     	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
     	atomicState.amIRunning = false
@@ -181,13 +207,6 @@ def deltaHandler(evt=null) {
         return
     }
 
-	Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()
-//    if (!atomicState.fanSinceLastAdjustment && (currentOnTime != 0)) {	// don't adjust if the fan hasn't run since we last changed the fanMinOnTime
-//    	LOG("Fan has not run since last adjustment, skipping",4,'','trace')
-//        atomicState.amIRunning = false
-//        return
-//    }
-    
     if (atomicState.lastAdjustmentTime) {
         def timeNow = now()
         def minutesLeft = settings.fanAdjustMinutes - ((timeNow - atomicState.lastAdjustmentTime) / 60000).toInteger()
@@ -198,7 +217,7 @@ def deltaHandler(evt=null) {
 		}
 	}
     
-
+    Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
 	Integer newOnTime = currentOnTime
 	
 	if (delta >= settings.deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
@@ -208,7 +227,11 @@ def deltaHandler(evt=null) {
 		}
 		if (currentOnTime != newOnTime) {
 			LOG("Temperature delta is ${String.format("%.2f",delta)}/${settings.deltaTemp}, increasing circulation time for ${settings.theThermostat} to ${newOnTime} minutes",2,"",'info')
-			settings.theThermostat.setFanMinOnTime(newOnTime)
+			if (vacationHold) {
+            	settings.theThermostat.setVacationFanMinOnTime(newOnTime)
+            } else {
+            	settings.theThermostat.setFanMinOnTime(newOnTime)
+            }
             atomicState.fanSinceLastAdjustment = false
 			atomicState.lastAdjustmentTime = now()
             atomicState.amIRunning = false
@@ -225,7 +248,11 @@ def deltaHandler(evt=null) {
 			}
             if (currentOnTime != newOnTime) {
            		LOG("Temperature delta is ${String.format("%.2f",delta)}/${String.format("%.2f",target)}, decreasing circulation time for ${settings.theThermostat} to ${newOnTime} minutes",2,"",'info')
-				settings.theThermostat.setFanMinOnTime(newOnTime)
+				if (vacationHold) {
+                	settings.theThermostat.setVacationFanMinOnTime(newOnTime)
+                } else {
+                	settings.theThermostat.setFanMinOnTime(newOnTime)
+                }
                 atomicState.fanSinceLastAdjustment = false
 				atomicState.lastAdjustmentTime = now()
                 atomicState.amIRunning = false
@@ -241,5 +268,5 @@ def deltaHandler(evt=null) {
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	parent.LOG(message, level, child, logType, event, displayEvent)
-    if (level <= 3) log.info message
+    if (level <= 4) log.info message
 }
