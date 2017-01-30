@@ -24,7 +24,7 @@ re-authorize with Ecobee once after you get everything installed and published).
 
 3. For Ecobee (Connect) SmartApp, be sure to enable OAuth. In the IDE, while you have Ecobee (Connect) open, Click on "App Settings" (top right), then select the OAuth tab and enable OAuth.
 
-<b>NOTE:</b> <i>This is a commonly missed step, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. So please don't skip this step.)</i>
+   <b>NOTE:</b> <i>This is a commonly missed step, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. So please don't skip this step.)</i>
 
 4. Copy the following into your IDE section "My Device Handlers", overwriting existing versions or 'Create New Device Handler / From Code'
   * <code>ecobee-sensor.groovy</code>
