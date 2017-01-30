@@ -29,10 +29,11 @@
  *	0.9.13 - Add attributes to indicate custom program names to child thermostats (smart1, smart2, etc)
  * 	0.10.1 - Massive overhaul for performance, efficiency, improved UI, enhanced functionality
  *	0.10.2 - Beta release of Barry's updated version
+ *	0.10.3 - Added support for setVacationFanMinOnTime() and deleteVacation()
  *
  */
 
-def getVersionNum() { return "0.10.2" }
+def getVersionNum() { return "0.10.3" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
@@ -67,6 +68,8 @@ metadata {
         
         command "setThermostatProgram"
         command "setFanMinOnTime"
+        command "setVacationFanMinOnTime"
+        command "deleteVacation"
         command "home"
         command "present"
 
@@ -516,7 +519,7 @@ metadata {
         	/* "operatingState", */  "equipmentState", "weatherIcon",  "refresh",  
             "currentProgramIcon", "weatherTemperature", "motionState", 
             "holdStatus", "fanMinOnTime", 
-			"oneBuffer", "commandDivider", "oneBuffer",
+            "oneBuffer", "commandDivider", "oneBuffer",
             "modeShow", "fanModeLabeled",  "resumeProgram", 
             "coolSliderControl", "coolingSetpoint",
             "heatSliderControl", "heatingSetpoint",            
@@ -1084,13 +1087,32 @@ void setFanMinOnTime(minutes) {
 	LOG("setFanMinOnTime(${minutes})", 5, null, "trace")
     def deviceId = getDeviceId()
     
-	def howLong = 10
+	def howLong = 10	// default to 10 minutes, if no value supplied
 	if (minutes.isNumber()) howLong = minutes
-    if ((howLong >=0) && (howLong <=  60)) {
+    if ((howLong >=0) && (howLong <=  55)) {
 		parent.setFanMinOnTime(this, deviceId, howLong)
     } else {
     	LOG("setFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
     }
+}
+
+void setVacationFanMinOnTime(minutes) {
+	LOG("setVacationFanMinOnTime(${minutes})", 5, null, "trace")
+    def deviceId = getDeviceId()
+    
+	def howLong = 0		// default to 0 minutes during Vacations, if no value supplied
+	if (minutes.isNumber()) howLong = minutes
+    if ((howLong >=0) && (howLong <=  55)) {
+		parent.setVacationFanMinOnTime(this, deviceId, howLong)
+    } else {
+    	LOG("setVacationFanMinOnTime(${minutes}) - invalid argument",5,null, "error")
+    }
+}
+
+void deleteVacation(vacationName = null) {
+	LOG("deleteVacation(${vacationName})", 5, null, "trace")
+    def deviceId = getDeviceId()
+    parent.deleteVacation(this, deviceId, vacationName)
 }
 
 def generateSetpointEvent() {
