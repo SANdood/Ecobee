@@ -2,6 +2,8 @@ Installation Instructions
 =========================
 <b>IMPORTANT!</b> Before installing and using my enhanced version, I <i>strongly encourage</i> you to review the most excellent documentation written by @StrykerSKS for his updates. You can find it here: https://github.com/StrykerSKS/SmartThingsPublic/blob/StrykerSKS-Ecobee3/smartapps/smartthings/ecobee-connect.src/README.md
 
+<b>NOTE: </b> You should follow Sean's instructions for <b>Install Manually from Code</b>, installing <i>and publishing</i> all five SmartApps and the two Device Handlers described below.
+
 If you have been using an earlier version of the ecboee Device Handler, either the original from SmartThings or the 
 updated version from @StrykerSKS, <b>your best bet is to remove those devices and SmartApps from your environment</b>
 before installing this version.
@@ -20,13 +22,17 @@ re-authorize with Ecobee once after you get everything installed and published).
 2. Save and 'Publish / For Me' each of the above. 
 <b>DO NOT try to run any of these until you have completed step 4 below!</b>
 
-3. Copy the following into your IDE section "My Device Handlers", overwriting existing versions or 'Create New Device Handler / From Code'
+3. For Ecobee (Connect) SmartApp, be sure to enable OAuth. In the IDE, while you have Ecobee (Connect) open, Click on "App Settings" (top right), then select the OAuth tab and enable OAuth.
+
+<b>NOTE:</b> <i>This is a commonly missed step, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. So please don't skip this step.)</i>
+
+4. Copy the following into your IDE section "My Device Handlers", overwriting existing versions or 'Create New Device Handler / From Code'
   * <code>ecobee-sensor.groovy</code>
   * <code>ecobee-thermostat.groovy</code>
 
-4. Save and 'Publish/For Me' both of the above
+5. Save and 'Publish/For Me' both of the above
 
-5. Now, run the Ecobee (Connect) SmartApp. 
+6. Now, run the Ecobee (Connect) SmartApp. 
   * If you installed on top of your existing envirnment, you can find it in the Automation Tab, under SmartApps
     * Verify your configuration is intact
     * Update your Preferences section - there are 2 new preferences (Notifications at the top, and Display precision at 
@@ -35,8 +41,8 @@ re-authorize with Ecobee once after you get everything installed and published).
   * If this is a new/fresh install, you'll get to configure everything. I suggest holding off on the Helper SmartApps until 
   you know things are working.
   
-6. When you finish the configuration, hit "Done".
+7. When you finish the configuration, hit "Done".
 
-7. Now, go select your thermostat(s) and check out the updated UI.
+8. Now, go select your thermostat(s) and check out the updated UI.
 
-8. For a thorough review of the updates and new features, be sure to read the README file in this repository.
+9. For a thorough review of the updates and new features, be sure to read the README file in this repository.
