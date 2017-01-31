@@ -33,15 +33,17 @@
  * 	0.9.18 - Fix customer Program handling
  *	0.9.19 - Add attributes to indicate custom program names to child thermostats (smart1, smart2, etc)
  *  0.9.20 - Allow installations where no "location" is set. Useful for virtual hubs and testing
- *	10.1.1 - Massive overhaul (see https://github.com/SANdood/Ecobee)
- *	10.1.2 - Added Smart Zone helper app
- *	10.1.3 - Added Smart Circulation helper app
- *	10.1.4 - Beta Release of Barry's updated version
- *	10.1.5 - Bug Fixes by Barry
+ *	0.10.1 - Massive overhaul (see https://github.com/SANdood/Ecobee)
+ *	0.10.2 - Added Smart Zone helper app
+ *	0.10.3 - Added Smart Circulation helper app
+ *	0.10.4 - Beta Release of Barry's updated version
+ *	0.10.5 - Bug Fixes by Barry
  *				- display Vacation's event.fanOnTime if in Vacation hold
+ *				- rewrite Vacation with new fanMinOnTime via setVacationFanMinOnTim
+ *	0.10.6 - Fix initial forcePoll in pollChildren()
  *
  */  
-def getVersionNum() { return "0.10.5" }
+def getVersionNum() { return "0.10.6" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1150,9 +1152,10 @@ def pollInit() {
 
 def pollChildren(child = null) {
 	def results = true   
-    if (child) atomicState.forcePoll = true
+    def forcePoll = (child) ? true : false
+    atomicState.forcePoll = forcePoll
     
-	LOG("=====> pollChildren() - atomicState.forcePoll(${atomicState.forcePoll})  atomicState.lastPoll(${atomicState.lastPoll})  now(${now()})  atomicState.lastPollDate(${state.lastPollDate})", 4, child, "trace")
+	LOG("=====> pollChildren() - atomicState.forcePoll(${forcePoll})  atomicState.lastPoll(${atomicState.lastPoll})  now(${now()})  atomicState.lastPollDate(${state.lastPollDate})", 4, child, "trace")
     
 	if(apiConnected() == "lost") {
     	// Possibly a false alarm? Check if we can update the token with one last fleeting try...
@@ -1179,16 +1182,14 @@ def pollChildren(child = null) {
     String thermostatsToPoll = getChildThermostatDeviceIdsString()
     if (child == null) { // normal call
    		// Check to see if it is time to do an full poll to the Ecobee servers. If so, execute the API call and update ALL children
-    	timeSinceLastPoll = atomicState.forcePoll ? 999.9 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
+    	timeSinceLastPoll = forcePoll ? 999.9 : ((now() - atomicState.lastPoll?.toDouble()) / 1000 / 60) 
     	LOG("Time since last poll? ${timeSinceLastPoll} -- atomicState.lastPoll == ${atomicState.lastPoll}", 3, child, "info")
     
     	// Also, check if anything has changed in the thermostatSummary (really don't need to call EcobeeAPI if it hasn't).
     	somethingChanged = checkThermostatSummary(thermostatsToPoll)
-	} else {
-    	atomicState.forcePoll = true	// called by a child - do a forcePoll
     }
     
-    if (atomicState.forcePoll  || somethingChanged) {
+    if (forcePoll || somethingChanged) {
     	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
         LOG("pollChildren() - Getting changes", 3, child)
     	pollEcobeeAPI(thermostatsToPoll)  // This will update the values saved in the state which can then be used to send the updates
@@ -1197,7 +1198,7 @@ def pollChildren(child = null) {
         // generateEventLocalParams() // Update any local parameters and send
     }
 	
-    if (somethingChanged) {
+    if (forcePoll || somethingChanged) {
 		// Iterate over all the children
 		def d = getChildDevices()
     	d?.each() { oneChild ->
@@ -1791,7 +1792,7 @@ def updateThermostatData() {
 					currentClimate = (tempClimateRef ? (atomicState.program[tid].climates.find { it.climateRef == tempClimateRef }).name : "")
                		currentClimateName = "Hold: " + currentClimate
                 } else {									// Not running a program, are we holding for something else?
-                	log.debug "runningEvent: ${runningEvent}"
+                	// log.debug "runningEvent: ${runningEvent}"
                 	if (runningEvent.name == "auto") {		// Handle the "auto" climates (includes fan on override, and maybe the Smart Recovery?)
                     	if ((statMode == "heat") && (runningEvent.fan != schedClimateRef.heatFan)) {
                         	currentClimateName = "Hold: Fan"
@@ -2225,7 +2226,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
                                 '","fan":"' + evt.fan + '","fanMinOnTime":"' + "${howLong}" + '"}}'
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
-    LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 1, child, "info")
+    LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
     
     def result = sendJson(child, jsonRequestBody)
     LOG("setVacationFanMinOnTime(${child}) with result ${result}", 3, child) 
