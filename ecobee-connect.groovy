@@ -41,7 +41,9 @@
  *				- display Vacation's event.fanOnTime if in Vacation hold
  *				- rewrite Vacation with new fanMinOnTime via setVacationFanMinOnTim
  *	0.10.6 - Fix initial forcePoll in pollChildren()
- *	0.10.7 - Fix above fix
+ *  0.10.7 - Interim fix
+ *	0.10.8 - Resolve unitialized variables
+ *
  *
  */  
 def getVersionNum() { return "0.10.6" }
@@ -794,8 +796,6 @@ def initialize() {
     atomicState.runtimeUpdated = true
     atomicState.thermostatUpdated = true
     atomicState.forcePoll= true				// make sure we get ALL the data after initialization
-	atomicState.lastEquipStatus = null
-	atomicState.lastEquipOpStat = null
     
     atomicState.timeOfDay = getTimeOfDay()
     
@@ -2617,7 +2617,7 @@ private def  getMinMinBtwPolls() {
 
 private def getPollingInterval() {
 	// return (settings.pollingInterval?.toInteger() >= 5) ? settings.pollingInterval.toInteger() : 5
-    return settings.pollingInterval?.toInteger()
+    return ((settings.pollingInterval) ? settings.pollingInterval.toInteger() : 5)
 }
 
 private def String getTimestamp() {
@@ -2777,8 +2777,6 @@ private def dirtyPollData() {
 	atomicState.forcePoll = true
     atomicState.lastRevisions = "foo"
     atomicState.latestRevisions = "bar"
-	atomicState.lastEquipStatus = null
-	atomicState.lastEquipOpStat = null
 }
 
 private String fixDateTimeString( String dateStr, String timeStr) {
