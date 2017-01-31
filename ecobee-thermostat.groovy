@@ -30,10 +30,11 @@
  * 	0.10.1 - Massive overhaul for performance, efficiency, improved UI, enhanced functionality
  *	0.10.2 - Beta release of Barry's updated version
  *	0.10.3 - Added support for setVacationFanMinOnTime() and deleteVacation()
+ *	0.10.4 - Fixed temperatureDisplay
  *
  */
 
-def getVersionNum() { return "0.10.3" }
+def getVersionNum() { return "0.10.4" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
@@ -564,35 +565,39 @@ def generateEvent(Map results) {
 	LOG("generateEvent(): parsing data $results", 4)
     LOG("Debug level of parent: ${parent.settings?.debugLevel}", 4, null, "debug")
 	def linkText = getLinkText(device)
+    def isMetric = wantMetric()
 
 	def updateTempRanges = false
 	
 	if(results) {
-		String tempDisplay = ""
 		results.each { name, value ->
 			LOG("generateEvent() - In each loop: name: ${name}  value: ${value}", 4)
 			def isChange = false
 			def isDisplayed = true
+            String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, descriptionText: getThermostatDescriptionText(name, value, linkText), handlerName: name]
 			def event = [:]
 			
 			if (name=="temperature" || name=="heatingSetpoint" || name=="coolingSetpoint" || name=="weatherTemperature" ) {
-				String sendValue = value as String // ? convertTemperatureIfNeeded(value.toDouble(), "F", 1): value //API return temperature value in F
-                LOG("generateEvent(): Temperature value: ${sendValue}", 5, this, "trace")
+            	def precision = device.currentValue("decimalPrecision")
+                if (!precision) precision = isMetric ? 1 : 0
+				String sendValue = isMetric ? "${convertTemperatureIfNeeded(value.toDouble(), "F", precision.toInteger())}" : "${value}" //API return temperature value in F
+                LOG("generateEvent(): Temperature ${name} value: ${sendValue}", 5, this, "trace")
 				isChange = isStateChange(device, name, value.toString())
 				// isDisplayed = isChange
 				// Only send changed events/values
 				if (isChange) event = eventFront + [value: sendValue, isStateChange: true, displayed: true]
 				if (name=="temperature") {
 					// Generate the display value that will preserve decimal positions ending in 0
-					Integer precision = device.currentValue("decimalPrecision").toInteger()
-                    if (!precision) precision = (getTemperatureScale() == "C") ? 1 : 0
+                    //log.debug "precision ${precision} temperature ${value}"
                     if (precision == 0) {
-                    	tempDisplay = value.toDouble().round(0)
+                    	tempDisplay = value.toDouble().round(0).toString()
                     } else {
-						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision)) + '°'
+						tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
                     }
+                    //log.debug "tempDisplay (${tempDisplay})"
 				}
+                
 			} else if (name=="heatMode" || name=="coolMode" || name=="autoMode" || name=="auxHeatMode") {
 				isChange = isStateChange(device, name, value.toString())
 				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: false]
@@ -624,10 +629,14 @@ def generateEvent(Map results) {
 				// isDisplayed = isChange
 				if (isChange) event = eventFront + [value: value.toString(), isStateChange: true, displayed: true]
 			}
-			LOG("Out of loop, calling sendevent(${event})", 5)
+			LOG("Out of loop, calling sendevent(${event}) for name ${name}", 5)
 			if (event != [:]) sendEvent(event)
+            if (tempDisplay != "") {
+        		event = [ name: "temperatureDisplay", value: "${tempDisplay}", linkText: linkText, descriptionText: getThermostatDescriptionText(name, value, linkText), handlerName: name, displayed: true ]
+        		sendEvent( event )
+            	LOG("tempDisplay, calling sendevent(${event})", 5)
+        	}
 		}
-		if (tempDisplay) sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: false)
 		generateSetpointEvent()
 		generateStatusEvent()
 	}
@@ -639,6 +648,9 @@ private getThermostatDescriptionText(name, value, linkText) {
 	switch (name) {
 		case 'temperature':
 			return "${linkText} temperature is ${value}°"
+            break;
+        case 'temperatureDisplay':
+        	return "Display temperature is ${value}"
             break;
 		case 'heatingSetpoint':
 			return "Heating setpoint is ${value}°"
