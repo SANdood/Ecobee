@@ -41,6 +41,7 @@
  *				- display Vacation's event.fanOnTime if in Vacation hold
  *				- rewrite Vacation with new fanMinOnTime via setVacationFanMinOnTim
  *	0.10.6 - Fix initial forcePoll in pollChildren()
+ *	0.10.7 - Fix above fix
  *
  */  
 def getVersionNum() { return "0.10.6" }
@@ -1152,7 +1153,7 @@ def pollInit() {
 
 def pollChildren(child = null) {
 	def results = true   
-    def forcePoll = (child) ? true : false
+    def forcePoll = (atomicState.forcePoll || child) ? true : false
     atomicState.forcePoll = forcePoll
     
 	LOG("=====> pollChildren() - atomicState.forcePoll(${forcePoll})  atomicState.lastPoll(${atomicState.lastPoll})  now(${now()})  atomicState.lastPollDate(${state.lastPollDate})", 4, child, "trace")
