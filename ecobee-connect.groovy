@@ -43,10 +43,11 @@
  *	0.10.6 - Fix initial forcePoll in pollChildren()
  *  0.10.7 - Interim fix
  *	0.10.8 - Resolve unitialized variables
+ *	0.10.9 - More error detection + Android authentication fixes
  *
  *
  */  
-def getVersionNum() { return "0.10.8" }
+def getVersionNum() { return "0.10.9" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -186,7 +187,7 @@ def mainPage() {
 		}            
 		
 		section ("Name this instance of ecobee (Connect)") {
-			label name: "name", title: "Assign a name", required: true, defaultValue: app.name
+			label name: "name", title: "Assign a name", required: false, defaultValue: app.name, description: app.name
 		}
      
 		section (getVersionLabel())
@@ -214,7 +215,7 @@ def authPage() {
 	def oauthTokenProvided = false
 
 	if(atomicState.authToken) {
-		description = "You are connected. Tap Done above."
+		description = "You are connected. Tap Done/Next above."
 		uninstallAllowed = true
 		oauthTokenProvided = true
         apiRestored()
@@ -2617,7 +2618,7 @@ private def  getMinMinBtwPolls() {
 
 private def getPollingInterval() {
 	// return (settings.pollingInterval?.toInteger() >= 5) ? settings.pollingInterval.toInteger() : 5
-    return ((settings.pollingInterval) ? settings.pollingInterval.toInteger() : 5)
+    return ((settings.pollingInterval && settings.pollingInterval.isNumber()) ? settings.pollingInterval.toInteger() : 5)
 }
 
 private def String getTimestamp() {
