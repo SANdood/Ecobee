@@ -16,9 +16,10 @@
  *	0.1.1	01/25/2017	Barry Burke -	Initial Release
  *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
  *	0.1.3	01/29/2017	Barry Burke -	Added sonfigurable support for overriding fanMinOnTime during Vacation holds
+ *  0.1.4   02/01/2017  Barry Burke -   Fixed label bug in Android
  *
  */
-def getVersionNum() { return "0.1.3" }
+def getVersionNum() { return "0.1.4" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
 
 
@@ -42,7 +43,7 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true, nextPage: "") {
     	section(title: "Name for Smart Circulation Handler") {
-        	label title: "Name this Smart Circulation Handler", required: true      
+        	label name: "name", title: "Name this Smart Circulation Handler", required: false, defaultValue: app.name, description: app.name      
         }
         
         section(title: "Select Thermostat") {
