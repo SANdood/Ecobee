@@ -44,10 +44,11 @@
  *  0.10.7 - Interim fix
  *	0.10.8 - Resolve unitialized variables
  *	0.10.9 - More error detection + Android authentication fixes
+ *	0.10.10- Closed the unititalized pollingInterval problem (again) - hopefully this one solves the problem 
  *
  *
  */  
-def getVersionNum() { return "0.10.9" }
+def getVersionNum() { return "0.10.10" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1034,6 +1035,7 @@ def scheduleWatchdog(evt=null, local=false) {
 private def Boolean isDaemonAlive(daemon="all") {
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
+	Integer pollingInterval = getPollingInterval().toInteger()
 
 	daemon = daemon.toLowerCase()
     def result = true    
@@ -1049,7 +1051,7 @@ private def Boolean isDaemonAlive(daemon="all") {
         
     if (daemon == "poll" || daemon == "all") {
     	LOG("isDaemonAlive() - Checking daemon (${daemon}) in 'poll'", 4, null, "trace")
-        def maxInterval = atomicState.pollingInterval + 2
+        def maxInterval = pollingInterval + 2
         if ( timeSinceLastScheduledPoll >= maxInterval ) { result = false }
 	}	
     
@@ -1072,6 +1074,8 @@ private def Boolean isDaemonAlive(daemon="all") {
 private def Boolean spawnDaemon(daemon="all", unsched=true) {
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
+	
+	Integer pollingInterval = getPollingInterval().toInteger()
     
     daemon = daemon.toLowerCase()
     def result = true
@@ -1082,13 +1086,13 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
         try {
             if( unsched ) { unschedule("pollScheduled") }
             if ( canSchedule() ) { 
-            	LOG("Polling Interval == ${atomicState.pollingInterval}", 4)
-            	if (atomicState.pollingInterval.toInteger() <= 3) {
-                	LOG("Using schedule instead of runEvery with atomicState.pollingInterval: ${atomicState.pollingInterval}", 4)
-                	schedule("* 0/${atomicState.pollingInterval} * * * ?", "pollScheduled")                    
+            	LOG("Polling Interval == ${pollingInterval}", 4)
+            	if (pollingInterval <= 3) {
+                	LOG("Using schedule instead of runEvery with pollingInterval: ${pollingInterval}", 4)
+                	schedule("* 0/${pollingInterval} * * * ?", "pollScheduled")                    
                 } else {
-                	LOG("Using runEvery to setup polling with atomicState.pollingInterval: ${atomicState.pollingInterval}", 4)
-        			"runEvery${atomicState.pollingInterval}Minutes"("pollScheduled")
+                	LOG("Using runEvery to setup polling with pollingInterval: ${pollingInterval}", 4)
+        			"runEvery${pollingInterval}Minutes"("pollScheduled")
                 }
             	result = pollScheduled() && result
 			} else {
