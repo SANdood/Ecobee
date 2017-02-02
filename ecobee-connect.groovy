@@ -46,10 +46,11 @@
  *	0.10.9 - More error detection + Android authentication fixes
  *	0.10.10- Closed the unititalized pollingInterval problem (again)
  *	0.10.11- Found and fixed issue (in updateThermostatData); optimized ue of atomics
+ *	0.10.12- WIP
  *
  *
  */  
-def getVersionNum() { return "0.10.11" }
+def getVersionNum() { return "0.10.12" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -869,6 +870,7 @@ def initialize() {
         atomicState.initializedEpic = nowTime
         atomicState.initializedDate = nowDate
 	}
+	log.debug getVersionLabel()
     return aOK
 }
 
