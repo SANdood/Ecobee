@@ -32,10 +32,11 @@
  *	0.10.3 - Added support for setVacationFanMinOnTime() and deleteVacation()
  *	0.10.4 - Fixed temperatureDisplay
  *	0.10.5 - Tuned up device notifications (icons, colors, etc.)
+ *	0.10.6 - Changed outside temp to use Ecobee stock temperature backgroundColors
  *
  */
 
-def getVersionNum() { return "0.10.5a" }
+def getVersionNum() { return "0.10.6" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
@@ -152,7 +153,7 @@ metadata {
 
     tiles(scale: 2) {      
               
-		multiAttributeTile(name:"tempSummary", type:"thermostat", width:6, height:4) {
+		multiAttributeTile(name:"temperatureDisplay", type:"thermostat", width:6, height:4) {
 			tileAttribute("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
 				attributeState("default", label:'${currentValue}', unit:"dF")
 			}
@@ -244,7 +245,7 @@ metadata {
 			state("thermostatSetpoint", label:'${currentValue}°', unit:"F",	backgroundColors: getTempColors())
 		}
         valueTile("weatherTemp", "device.weatherTemperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
-			state("weatherTemperature", label:'${currentValue}°', unit:"F",	backgroundColors: getTempColors())
+			state("weatherTemperature", label:'${currentValue}°', unit:"F",	backgroundColors: getStockTempColors())		// use Fahrenheit scale so that outdoor temps register
 		}
 		
 		standardTile("mode", "device.thermostatMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
@@ -521,10 +522,10 @@ metadata {
         	state "default", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/command_divider.png"			
         }        
     
-		main(["temperature", "tempSummary"])
+		main(["temperature", "temperatureDisplay"])
 		details([
         	// Use this if you are on a fully operational device OS (such as iOS or Android)
-        	"tempSummary",
+        	"temperatureDisplay",
             // Use the lines below if you can't (or don't want to) use the multiAttributeTile version
             // To use, uncomment these lines below, and comment out the line above
             // "temperature", "humidity",  "upButtonControl", "thermostatSetpoint", 
@@ -547,12 +548,13 @@ metadata {
 	}
 
 	preferences {
-    	section () {
+    	section (title: "${getVersionLabel()}") {
 			input "holdType", "enum", title: "Hold Type", description: "When changing temperature, use Temporary or Permanent hold (default)", required: false, options:["Temporary", "Permanent"]
         	// TODO: Add a preference for the background color for "idle"
         	// TODO: Allow for a "smart" Setpoint change in "Auto" mode. Why won't the paragraph show up in the Edit Device screen?
-        	paragraph "The Smart Auto Temp Adjust flag allows for the temperature to be adjusted manually even when the thermostat is in Auto mode. An attempt to determine if the heat or cool setting should be changed will be made automatically."
-            input "smartAuto", "bool", title: "Smart Auto Temp Adjust", description: true, required: false
+        	// paragraph "The Smart Auto Temp Adjust flag allows for the temperature to be adjusted manually even when the thermostat is in Auto mode. An attempt to determine if the heat or cool setting should be changed will be made automatically."
+            input "smartAuto", "bool", title: "Smart Auto Temp Adjust", description: "This flag allows the temperature to be adjusted manually when the thermostat " +
+					"is in Auto mode. An attempt to determine if the heat or cool setting should be changed is made automatically.", required: false
             // input "detailedTracing", "bool", title: "Enable Detailed Tracing", description: true, required: false
        }
 	}
@@ -1582,4 +1584,18 @@ def getTempColors() {
         
         [value: 451, color: "#ffa81e"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
 	]
+}
+
+def getStockTempColors() {
+	def colorMap
+    
+    colorMap = [
+    	[value: 31, color: "#153591"],
+        [value: 44, color: "#1e9cbb"],
+        [value: 59, color: "#90d2a7"],
+        [value: 74, color: "#44b621"],
+        [value: 84, color: "#f1d801"],
+        [value: 95, color: "#d04e00"],
+        [value: 96, color: "#bc2323"]
+    ]       
 }
