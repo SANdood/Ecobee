@@ -12,16 +12,13 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  * 
- *	Updates by Barry A. Burke (storageanarchy@gmail.com)
- *	Updated: 2017-01-28
- *	https://github.com/SANdood/Ecobee/
- *
  *  See Changelog for change history
+ *	0.10.1 - Tweaks to display decimal precision
+ *	0.10.2 - Updated Temperature display tile
  *
- *	0.10.1 - Beta release of Barry's enhanced version
  */
 
-def getVersionNum() { return "0.10.1" }
+def getVersionNum() { return "0.10.2" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}-RC8" }
 
 metadata {
@@ -43,7 +40,7 @@ metadata {
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type: "generic", width: 6, height: 4){
 			tileAttribute ("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
-				attributeState("temperatureDisplay", label:'\n${currentValue}',
+				attributeState("default", label:'${currentValue}',
 					backgroundColors: getTempColors())
 			}
 			tileAttribute ("device.motion", key: "SECONDARY_CONTROL") {
@@ -53,12 +50,12 @@ metadata {
            	 	attributeState "not supported", action: "noOp", nextState: "not supported", label: "N/A", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/notsupported_x.png"
             }
 		}
-		valueTile("temperature", "device.temperature", width: 4, height: 4) {
-            state("temperature", defaultState: true, label:'${currentValue}°', unit:"dF",
+        
+		valueTile("temperature", "device.temperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
+            state("temperature", defaultState: true, label:'${currentValue}°', unit:"F",
 				backgroundColors: getTempColors()
 			)
 		}
-
         
         standardTile("motion", "device.motion", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "active", action:"noOp", nextState: "active", label:"Motion", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/motion_sensor_motion.png"
@@ -88,7 +85,7 @@ def refresh() {
 
 void poll() {
 	LOG( "Ecobee Sensor: Executing 'poll' using parent SmartApp", 4, this, "trace")
-	parent.pollChildren(this)  // request a forcePoll of ALL devices by including "this"
+	parent.pollChildren(this)
 }
 
 
@@ -114,18 +111,20 @@ def generateEvent(Map results) {
                 } else {
                 	// must be online
                     state.onlineState = true   
-					
+					isChange = isStateChange(device, name, sendValue.toString())
+                    
                     // Generate the display value that will preserve decimal positions ending in 0
-					def precision = device.currentValue("decimalPrecision")
-                    if (!precision) precision = (tempScale == "C") ? 1 : 0
-                    if (precision == 0) {
-                    	tempDisplay = Math.round(value.toDouble())
-                    } else {
-						tempDisplay = String.format( "%.${precision}f", value.toDouble().round(precision.toInteger())) + '°'
+                    if (isChange) {
+						def precision = device.currentValue("decimalPrecision")
+                    	if (!precision) precision = (tempScale == "C") ? 1 : 0
+                    	if (precision == 0) {
+                    		tempDisplay = value.toDouble().round(0).toString()
+                    	} else {
+							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
+                    	}
                     }
                 }
-                
-				isChange = isStateChange(device, name, sendValue.toString())
+				
 				// isDisplayed = isChange
 				if (isChange) event = [name: name, linkText: linkText, desciptionText: "Temperature is ${tempDisplay}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 				
@@ -149,7 +148,7 @@ def generateEvent(Map results) {
 			if (event != [:]) sendEvent(event)
 		}
 		if (tempDisplay) {
-			sendEvent( name: "temperatureDisplay", value: tempDisplay as String, displayed: false)
+			sendEvent( name: "temperatureDisplay", linkText: linkText, value: "${tempDisplay}", handlerName: "temperatureDisplay", descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 		}
 	}
 }
