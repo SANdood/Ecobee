@@ -35,7 +35,7 @@
  *
  */
 
-def getVersionNum() { return "0.10.5" }
+def getVersionNum() { return "0.10.5a" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 
  
