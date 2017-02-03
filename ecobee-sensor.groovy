@@ -14,7 +14,7 @@
  * 
  *  See Changelog for change history
  *	0.10.1 - Tweaks to display decimal precision
- *	0.10.2 - Updated Temperature display tile
+ *	0.10.2 - Fixed so that Temperature shows in large font for Room/Thing List vies
  *
  */
 
@@ -40,7 +40,7 @@ metadata {
 	tiles(scale: 2) {
 		multiAttributeTile(name:"temperatureDisplay", type: "generic", width: 6, height: 4){
 			tileAttribute ("device.temperatureDisplay", key: "PRIMARY_CONTROL") {
-				attributeState("default", label:'${currentValue}',
+				attributeState("temperature", label:'${currentValue}',
 					backgroundColors: getTempColors())
 			}
 			tileAttribute ("device.motion", key: "SECONDARY_CONTROL") {
@@ -73,7 +73,7 @@ metadata {
 		}
 
 
-		main (["temperatureDisplay",])
+		main (["temperature", "temperatureDisplay",])
 		details(["temperatureDisplay","refresh"])
 	}
 }
@@ -111,14 +111,14 @@ def generateEvent(Map results) {
                 } else {
                 	// must be online
                     state.onlineState = true   
-					isChange = isStateChange(device, name, sendValue.toString())
+					isChange = isStateChange(device, name, "${sendValue}")
                     
                     // Generate the display value that will preserve decimal positions ending in 0
                     if (isChange) {
 						def precision = device.currentValue("decimalPrecision")
                     	if (!precision) precision = (tempScale == "C") ? 1 : 0
                     	if (precision == 0) {
-                    		tempDisplay = value.toDouble().round(0).toString()
+                    		tempDisplay = value.toDouble().round(0).toInteger().toString() + '°'
                     	} else {
 							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
                     	}
@@ -126,7 +126,7 @@ def generateEvent(Map results) {
                 }
 				
 				// isDisplayed = isChange
-				if (isChange) event = [name: name, linkText: linkText, desciptionText: "Temperature is ${tempDisplay}", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
+				if (isChange) event = [name: name, linkText: linkText, desciptionText: "Temperature is ${tempDisplay}°", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
 				
 			} else if (name=="motion") {        
             	def sendValue = value
@@ -217,4 +217,18 @@ def getTempColors() {
         
         [value: 451, color: "#ffa81e"] // Nod to the book and temp that paper burns. Used to catch when the device is offline
 	]
+}
+
+def getStockTempColors() {
+	def colorMap
+    
+    colorMap = [
+    	[value: 32, color: "#153591"],
+        [value: 44, color: "#1e9cbb"],
+        [value: 59, color: "#90d2a7"],
+        [value: 74, color: "#44b621"],
+        [value: 84, color: "#f1d801"],
+        [value: 92, color: "#d04e00"],
+        [value: 98, color: "#bc2323"]
+    ]       
 }
