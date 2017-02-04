@@ -33,6 +33,7 @@
  *	0.10.4 - Fixed temperatureDisplay
  *	0.10.5 - Tuned up device notifications (icons, colors, etc.)
  *	0.10.6 - Changed outside temp to use Ecobee stock temperature backgroundColors
+ *	0.10.7 - Fix heat/cool setpoint tiles
  *
  */
 
@@ -235,15 +236,6 @@ metadata {
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
-        valueTile("heatingSetpoint", "device.heatingSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
-			state("heatingSetpoint", label:'${currentValue}°', unit:"F", backgroundColor:"#ff9c14")
-		}
-        valueTile("coolingSetpoint", "device.coolingSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
-			state("coolingSetpoint", label:'${currentValue}°', unit:"F", backgroundColor:"#2db9e7")
-		}
-        valueTile("thermostatSetpoint", "device.thermostatSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
-			state("thermostatSetpoint", label:'${currentValue}°', unit:"F",	backgroundColors: getTempColors())
-		}
         valueTile("weatherTemp", "device.weatherTemperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
 			state("weatherTemperature", label:'${currentValue}°', unit:"F",	backgroundColors: getStockTempColors())		// use Fahrenheit scale so that outdoor temps register
 		}
@@ -335,16 +327,16 @@ metadata {
 			state "setpoint", action:"lowerSetpoint", icon:"st.thermostat.thermostat-down"
 		}
 		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
-			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00", unit: 'C'
+			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#ff9c14", unit: 'C'
 		}
 		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 2, inactiveLabel: false, decoration: "flat") {
-			state "heat", label:'${currentValue}°\nHeat', unit:"dF", backgroundColor:"#d04e00"
+			state "heat", label:'${currentValue}°\nHeat', unit:"dF", backgroundColor:"#ff9c14"
 		}
 		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
-			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor: "#1e9cbb", unit: 'C'
+			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor:"#2db9e7", unit: 'C'
 		}
 		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 2, height: 1, inactiveLabel: false, decoration: "flat") {
-			state "cool", label:'${currentValue}°\nCool', unit:"dF", backgroundColor: "#1e9cbb"
+			state "cool", label:'${currentValue}°\nCool', unit:"dF", backgroundColor:"#2db9e7"
 		}
 		standardTile("refresh", "device.thermostatMode", width: 2, height: 2,inactiveLabel: false, decoration: "flat") {
             state "default", action:"refresh.refresh", label: "Refresh", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
