@@ -49,10 +49,11 @@
  *	0.10.12- Refined LOG levels
  *	0.10.13- Added sending programsList (list of available ecobee climates) to thermostat(s)
  *	0.10.14- Reduced frequency of sending of never/rarely changing objects to the Thermostat(s)
+ *	0.10.15- Converted heat/cool ranges to C when appropriate
  *
  *
  */  
-def getVersionNum() { return "0.10.14" }
+def getVersionNum() { return "0.10.15" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1783,10 +1784,10 @@ def updateThermostatData() {
 			heatRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(5..25)" : "(40..80)"
 			coolRange = usingMetric ? "(5..35)" : "(45..95)" 	// "(18..35)" : "(65..95)"
 			
-			heatHigh = (statSettings.heatRangeHigh.toDouble() / 10.0).round(userPrecision)
-			heatLow =  (statSettings.heatRangeLow.toDouble() / 10.0).round(userPrecision)
-			coolHigh = (statSettings.coolRangeHigh.toDouble() / 10.0).round(userPrecision)
-			coolLow =  (statSettings.coolRangeLow.toDouble() / 10.0).round(userPrecision)
+			heatHigh = myConvertTemperatureIfNeeded((statSettings.heatRangeHigh.toDouble() / 10.0), "F", userPrecision)
+			heatLow =  myConvertTemperatureIfNeeded((statSettings.heatRangeLow.toDouble() / 10.0), "F", userPrecision)
+			coolHigh = myConvertTemperatureIfNeeded((statSettings.coolRangeHigh.toDouble() / 10.0), "F", userPrecision)
+			coolLow =  myConvertTemperatureIfNeeded((statSettings.coolRangeLow.toDouble() / 10.0), "F", userPrecision)
 			
 			// calculate these anyway (for now) - it's easier to read the range while debugging
 			if (heatLow && heatHigh) heatRange = "(${Math.round(heatLow)}..${Math.round(heatHigh)})"
