@@ -34,12 +34,13 @@
  *	0.10.5 - Tuned up device notifications (icons, colors, etc.)
  *	0.10.6 - Changed outside temp to use Ecobee stock temperature backgroundColors
  *	0.10.7 - Fix heat/cool setpoint tiles
+ *	0.10.8 - Added programsList attribute - list of available "climates" on this thermostat
  *
  */
 
 def getVersionNum() { return "0.10.6" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
-
+import groovy.json.JsonSlurper
  
 metadata {
 	definition (name: "Ecobee Thermostat", namespace: "smartthings", author: "SmartThings") {
@@ -130,11 +131,11 @@ metadata {
 		attribute "heatRange", "string"
 		attribute "coolRange", "string"
 		attribute "thermostatHold", "string"
-//        attribute "holdEndsAt", "string"
 		attribute "holdStatus", "string"
         attribute "heatDifferential", "number"
         attribute "coolDifferential", "number"
         attribute "fanMinOnTime", "number"
+        attribute "programsList", "enum"
 		
 		// attribute "debugLevel", "number"
 		
@@ -236,7 +237,16 @@ metadata {
 		}
         
         // these are here just to get the colored icons to diplay in the Recently log in the Mobile App
-        valueTile("weatherTemp", "device.weatherTemperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
+        valueTile("heatingSetpointColor", "device.heatingSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
+			state("heatingSetpoint", label:'${currentValue}°', unit:"F", backgroundColor:"#ff9c14")
+		}
+        valueTile("coolingSetpointColor", "device.coolingSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
+			state("coolingSetpoint", label:'${currentValue}°', unit:"F", backgroundColor:"#2db9e7")
+		}
+        valueTile("thermostatSetpointColor", "device.thermostatSetpoint", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
+			state("thermostatSetpoint", label:'${currentValue}°', unit:"F",	backgroundColors: getTempColors())
+		}
+        valueTile("weatherTempColor", "device.weatherTemperature", width: 2, height: 2, canChangeIcon: false, icon: "st.Home.home1") {
 			state("weatherTemperature", label:'${currentValue}°', unit:"F",	backgroundColors: getStockTempColors())		// use Fahrenheit scale so that outdoor temps register
 		}
 		
@@ -701,6 +711,7 @@ def generateEvent(Map results) {
 				case 'auxHeatMode':
 				case 'heatDifferential':
 				case 'coolDifferential':
+                case 'programsList':
 					if (isChange) event = eventFront +  [value: "${value}", isStateChange: true, displayed: false]
 					break;
 				
@@ -996,8 +1007,14 @@ void auto() {
 
 // Handle Comfort Settings
 void setThermostatProgram(program, holdType=null) {
-	// Change the Comfort Setting to Home
-    LOG("setThermostatProgram: program: ${program}  holdType: ${holdType}", 4)
+	// Change the Comfort Setting (aka Climate)
+    def programsList = []
+    programsList = new JsonSlurper().parseText(device.currentValue('programsList'))
+    if (!programsList.contains(program)) {
+    	LOG("setThermostatProgram(${program}) - invalid argument",2,this,'warn')
+        return
+    }
+    LOG("setThermostatProgram() program: ${program} holdType: ${holdType}", 4)
 	def deviceId = getDeviceId()    
 
 	LOG("Before calling parent.setProgram()", 5)
@@ -1009,7 +1026,7 @@ void setThermostatProgram(program, holdType=null) {
 	// but only if this is NOT a permanent hold request
 	if (sendHoldType == 'nextTransition') {
 		if (device.currentValue("scheduledProgram") == program) {
-			LOG("setThermostatProgram() - resuming scheduled program ${program}", 4)
+			LOG("setThermostatProgram() - resuming scheduled program ${program}", 3, this, 'info')
 			resumeProgram()
 			return
 		}
@@ -1018,7 +1035,7 @@ void setThermostatProgram(program, holdType=null) {
     if ( parent.setProgram(this, program, deviceId, sendHoldType) ) {
 		generateProgramEvent(program)
 	} else {
-    	LOG("Error setting new comfort setting ${program}.", 2, null, "warn")
+    	LOG("Error setting new comfort setting ${program}.", 2, this, "warn")
 		def priorProgram = device.currentState("currentProgramId")?.value
 		generateProgramEvent(priorProgram, program) // reset the tile back
 	}
@@ -1047,7 +1064,7 @@ void away() {
 }
 
 // Unfortunately, we can't overload the internal Java/Groovy/system definition of 'sleep()'
-/* def sleep() {
+/*def sleep() {
 	// Change the Comfort Setting to Sleep    
     LOG("sleep()", 5)
     setThermostatProgram("Sleep")
