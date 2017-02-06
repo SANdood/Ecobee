@@ -35,10 +35,11 @@
  *	0.10.6 - Changed outside temp to use Ecobee stock temperature backgroundColors
  *	0.10.7 - Fix heat/cool setpoint tiles
  *	0.10.8 - Added programsList attribute - list of available "climates" on this thermostat
+ *  0.10.9 - Fixed double FtoC conversions
  *
  */
 
-def getVersionNum() { return "0.10.6" }
+def getVersionNum() { return "0.10.9" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -585,6 +586,8 @@ def generateEvent(Map results) {
     def isMetric = wantMetric()
 
 	def updateTempRanges = false
+    def precision = device.currentValue('decimalPrecision')
+    if (!precision) precision = isMetric ? 1 : 0
 	
 	if(results) {
 		results.each { name, value ->
@@ -600,11 +603,8 @@ def generateEvent(Map results) {
 				case 'heatingSetpoint':
 				case 'coolingSetpoint':
 				case 'weatherTemperature':
-            		def precision = device.currentValue('decimalPrecision')
-                	if (!precision) precision = isMetric ? 1 : 0
-					String sendValue = isMetric ? "${convertTemperatureIfNeeded(value.toDouble(), "F", precision.toInteger())}" : "${value}" //API return temperature value in F
-                	// LOG("generateEvent(): Temperature ${name} value: ${sendValue}", 5, this, "trace")
-					if (isChange) event = eventFront + [value: sendValue,  descriptionText: getTemperatureDescriptionText(name, value, linkText), isStateChange: true, displayed: true]
+                    String sendValue = "${value}"		// Already rounded to appropriate user precision (except temperature, which is sent in API precision)
+                    if (isChange) event = eventFront + [value: sendValue,  descriptionText: getTemperatureDescriptionText(name, value, linkText), isStateChange: true, displayed: true]
 					if (name=="temperature") {
 						// Generate the display value that will preserve decimal positions ending in 0
                     	if (precision == 0) {
@@ -612,7 +612,7 @@ def generateEvent(Map results) {
                     	} else {
 							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
                     	}
-					}
+					} 
 					break;
 				
 				case 'thermostatOperatingState':
