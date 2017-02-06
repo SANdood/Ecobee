@@ -15,13 +15,13 @@
  *
  *	0.1.1	01/25/2017	Barry Burke -	Initial Release
  *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
- *	0.1.3	01/29/2017	Barry Burke -	Added sonfigurable support for overriding fanMinOnTime during Vacation holds
- *  0.1.4   02/01/2017  Barry Burke -   Fixed label bug in Android
+ *	0.1.3	01/29/2017	Barry Burke -	Added configurable support for overriding fanMinOnTime during Vacation holds
+ *	0.1.4	02/04/2017 	Barry Burke	-	Added ability to specify both modes and programsList for when a handler should/can run
  *
  */
 def getVersionNum() { return "0.1.4" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
-
+import groovy.json.JsonSlurper
 
 definition(
 	name: "ecobee Smart Circulation",
@@ -43,7 +43,7 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true, nextPage: "") {
     	section(title: "Name for Smart Circulation Handler") {
-        	label name: "name", title: "Name this Smart Circulation Handler", required: false, defaultValue: app.name, description: app.name      
+        	label title: "Name this Smart Circulation Handler", required: true      
         }
         
         section(title: "Select Thermostat") {
@@ -58,31 +58,33 @@ def mainPage() {
 		}
         
         section(title: "Fan On Time Automation Configuration") {
-        	paragraph "Increase Fan On minutes per hour (m/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this."
+        	paragraph("Increase Circulation time (min/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this.")
             input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true,
 				  defaultValue: "2.0", /* description: "2.0", */ multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
-            paragraph "Minimum Fan On minutes per hour (m/hr). Note: includes heating, cooling and fan only minutes."
-            input (name: "minFanOnTime", type: "number", title: "Set minimum fan on m/hr (0-60)", required: true,
+            paragraph("Minimum Circulation time (min/hr). Includes heating, cooling and fan only minutes.")
+            input(name: "minFanOnTime", type: "number", title: "Set minimum fan on min/hr (0-55)", required: true,
 				   defaultValue: "5", description: "5", range: "0..55", submitOnChange: true)
-            paragraph "Maximum Fan On minutes per hour (m/hr)."
-            input (name: "maxFanOnTime", type: "number", title: "Set maximum fan on m/hr (${minFanOnTime?minFanOnTime:0}-60)", required: true,
+            paragraph("Maximum Circulation time (min/hr).")
+            input(name: "maxFanOnTime", type: "number", title: "Set maximum fan on min/hr (${minFanOnTime?minFanOnTime:0}-55)", required: true,
 				   defaultValue: "55", description: "55", range: '${minFanOnTime}..55', submitOnChange: true)
-            paragraph "Adjust Fan On minutes per hour (m/hr) by this many minutes each adjustment."
+            paragraph("Adjust Circulation time (min/hr) by this many minutes each adjustment.")
             input (name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true,
 				   defaultValue: "5", description: "5", range: "1..20")
-            paragraph "Minimum number of minutes between adjustments."
+            paragraph("Minimum number of minutes between adjustments.")
             input (name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true,
-				   defaultValue: "15", description: "15", range: "5..60")
+				   defaultValue: "10", description: "15", range: "5..60")
         }
         
         section(title: "Vacation Hold Override") {
-        	paragraph "The fan circulation setting is overridden when a Vacation is in effect. If you would like to automate the fan during a Vacation hold, enable this setting."
+        	paragraph("The thermostat's Circulation setting is overridden when a Vacation is in effect. If you would like to automate the Circulation time during a Vacation hold, enable this setting.")
             input(name: "vacationOverride", type: "boolean", title: "Override fan during Vacation hold?", defaulValue: false)
         }
        
-		section(mobileOnly:true, title: "Enable only for specific modes?") {
-        	paragraph "NOTE: The Fan On minutes per hour is only changed while in these modes - the Fan On m/hr will remain at the last setting while in other modes. If you want different configuration settings for different SmartThings modes, create multiple Smart Circulation Hhandlers."
-            mode title: "Enable for specific mode(s)", required: false
+		section(title: "Enable only for specific modes or programs?") {
+        	paragraph("Circulation time (min/hr) is only adjusted while in these modes and/or programs. The time will remain at the last setting while in other modes. " +
+            			"If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
+            input(name: "modes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+            input(name: "programs", type: "enum", title: "Only when the ${theThermostat ? theThermostat : 'thermostat'} Program is", multiple: true, required: false, options: getProgramsList())
         }
 		
 		section(title: "Temporarily Disable?") {
@@ -112,9 +114,14 @@ def updated() {
     initialize()
 }
 
+def getProgramsList() {
+    return settings.theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : ["Away","Home","Sleep"]
+}
+
 def initialize() {
-	LOG("Initializing...", 4, "", 'trace')
+	LOG("${getVersionLabel()}\nInitializing...", 3, "", 'info')
 	atomicState.amIRunning = false				// reset in case we get stuck (doesn't matter a lot if we run more than 1 instance, just wastes resources)
+    def mode = location.mode
     
 	// Now, just exit if we are disabled...
 	if(tempDisable == true) {
@@ -126,40 +133,58 @@ def initialize() {
     atomicState.lastAdjustmentTime = now() - (60001 * settings.fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event
     
     subscribe(settings.theThermostat, "thermostatOperatingState", deltaHandler)
-    
+    subscribe(settings.theThermostat, "currentProgram", deltaHandler)
+    subscribe(settings.theThermostat, "thermostatHold", deltaHandler)
     subscribe(settings.theSensors, "temperature", deltaHandler)
     subscribe(location, "mode", deltaHandler)
     subscribe(location, "routineExecuted", deltaHandler)
-
-	Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()
-    boolean vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
     
-	if (currentOnTime < settings.minFanOnTime) {
-    	if (vacationHold && settings.vacationOverride) {
-        	settings.theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
-            currentOnTime = settings.minFanOnTime
-        } else if (!vacationHold) {
-    		settings.theThermostat.setFanMinOnTime(settings.minFanOnTime)
-            currentOnTime = settings.minFanOnTime
-        }
-    } else if (currentOnTime > settings.maxFanOnTime) {
-    	if (vacationHold && settings.vacationOverride) {
-        	settings.theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
-        	currentOnTime = settings.maxFanOnTime
-        } else if (!vacationHold) {
-    		settings.theThermostat.setFanMinOnTime(settings.maxFanOnTime)
-        	currentOnTime = settings.maxFanOnTime
-        }
+    Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()
+    boolean vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
+
+	def programsList = []
+    programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
+    
+	log.debug "settings ${modes}, location ${location.mode}, programs ${programs} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
+    log.debug "programs list contains current program: ${programsList.contains(theThermostat.currentValue('currentProgram'))}"
+    log.debug "${programsList[0]}, ${programsList[1]} ${programsList.size()}"
+   
+	// only adjust if we are currently in one of the allowed modes
+    def isOK = true
+	if (settings.modes && !settings.modes.contains(location.mode)) isOK = false
+    if (isOK && settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) isOK = false
+    
+    if (isOK) {	
+		if (currentOnTime < settings.minFanOnTime) {
+    		if (vacationHold && settings.vacationOverride) {
+        		settings.theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
+            	currentOnTime = settings.minFanOnTime
+        	} else if (!vacationHold) {
+    			settings.theThermostat.setFanMinOnTime(settings.minFanOnTime)
+            	currentOnTime = settings.minFanOnTime
+        	}
+    	} else if (currentOnTime > settings.maxFanOnTime) {
+    		if (vacationHold && settings.vacationOverride) {
+        		settings.theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
+        		currentOnTime = settings.maxFanOnTime
+        	} else if (!vacationHold) {
+    			settings.theThermostat.setFanMinOnTime(settings.maxFanOnTime)
+        		currentOnTime = settings.maxFanOnTime
+        	}
+    	}
+        if (!vacationHold) deltaHandler()
     }
     def vaca = vacationHold ? " is in Vacation mode, " : " "    
     LOG("thermostat ${settings.theThermostat}${vaca}circulation time is now ${currentOnTime} minutes/hour",2,"",'info')
-	atomicState.fanSinceLastAdjustment = true
-
-    if (!vacationHold) deltaHandler()
+	atomicState.fanSinceLastAdjustment = true    
     LOG("Initialization complete", 4, "", 'trace')
 }
 
 def deltaHandler(evt=null) {
+	// silently refuse to run if not in proper mode or program
+	if (settings.modes && !settings.modes?.contains(location.mode)) return  	
+    if (settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) return
+    
 	def vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
 	if (!settings.vacationOverride && vacationHold) {
     	LOG("${settings.theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 4, "", 'warn')
@@ -174,7 +199,6 @@ def deltaHandler(evt=null) {
     } else {
     	LOG("deltaHandler() called directly", 4, "", 'trace')
     }
-
 
     if (atomicState.amIRunning) {return} else {atomicState.amIRunning = true}
     
