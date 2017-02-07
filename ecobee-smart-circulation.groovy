@@ -1,5 +1,5 @@
 /**
- *  ecobee smartCirculation
+ *  ecobee Smart Circulation
  *
  *  Copyright 2017 Barry A. Burke
  *
@@ -17,10 +17,11 @@
  *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
  *	0.1.3	01/29/2017	Barry Burke -	Added configurable support for overriding fanMinOnTime during Vacation holds
  *	0.1.4	02/04/2017 	Barry Burke	-	Added ability to specify both modes and programsList for when a handler should/can run
- *	0.1.5	0s/06/2017	Barry Burke -	Android fix (bad range in min/maxFanOnTime settings)
+ *	0.1.5	02/06/2017	Barry Burke -	Android fix (bad range in min/maxFanOnTime settings)
+ *	0.1.6	02/07/2016	Barry Burke	- 	Minor logic tweaking - is now Mode *OR* Program
  *
  */
-def getVersionNum() { return "0.1.5" }
+def getVersionNum() { return "0.1.6" }
 private def getVersionLabel() { return "ecobee Smart Circulation Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -75,9 +76,9 @@ def mainPage() {
         }
        
 		section(title: "Enable only for specific modes or programs?") {
-        	paragraph("Circulation time (min/hr) is only adjusted while in these modes and/or programs. The time will remain at the last setting while in other modes. If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
+        	paragraph("Circulation time (min/hr) is only adjusted while in these modes *OR* programs. The time will remain at the last setting while in other modes. If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
             input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
-            input(name: "programs", type: "enum", title: "Only when the ${theThermostat ? theThermostat : 'thermostat'} Program is", multiple: true, required: false, options: getProgramsList())
+            input(name: "thePrograms", type: "enum", title: "Only when the ${theThermostat ? theThermostat : 'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
         }
 		
 		section(title: "Temporarily Disable?") {
@@ -108,7 +109,7 @@ def updated() {
 }
 
 def getProgramsList() {
-    return settings.theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : ["Away","Home","Sleep"]
+    return theThermostat ? new JsonSlurper().parseText(theThermostat.currentValue('programsList')) : ["Away","Home","Sleep"]
 }
 
 def initialize() {
@@ -123,77 +124,84 @@ def initialize() {
     }
     
     // Initialize as if we haven't checked in more than fanAdjustMinutes
-    atomicState.lastAdjustmentTime = now() - (60001 * settings.fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event
-    
-    subscribe(settings.theThermostat, "thermostatOperatingState", deltaHandler)
-    subscribe(settings.theThermostat, "currentProgram", deltaHandler)
-    subscribe(settings.theThermostat, "thermostatHold", deltaHandler)
-    subscribe(settings.theSensors, "temperature", deltaHandler)
-    subscribe(location, "mode", deltaHandler)
-    subscribe(location, "routineExecuted", deltaHandler)
-    
-    Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()
-    boolean vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
+    atomicState.lastAdjustmentTime = now() - (60001 * fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event    
 
-	def programsList = []
-    programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
+    subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)
+    subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
+    subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
+    subscribe(location, "routineExecuted", modeOrProgramHandler)    
+    subscribe(location, "mode", modeOrProgramHandler)
     
-	log.debug "settings ${theModes}, location ${location.mode}, programs ${programs} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
-    log.debug "programs list contains current program: ${programsList.contains(theThermostat.currentValue('currentProgram'))}"
-    log.debug "${programsList[0]}, ${programsList[1]} ${programsList.size()}"
+    subscribe(theSensors, "temperature", deltaHandler)
+
+    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger()
+    boolean vacationHold = (theThermostat.currentValue("currentProgramName") == "Vacation")
+    
+	log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
    
-	// only adjust if we are currently in one of the allowed modes
+	// Allow adjustments if thermostat OR location is currently as configured
+    // Also allow if neither are configured
     def isOK = true
-	if (settings.theModes && !settings.theModes.contains(location.mode)) isOK = false
-    if (isOK && settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) isOK = false
+    if (theModes || thePrograms) {
+    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : false)
+    }
+    atomicState.isOK = isOK
     
     if (isOK) {	
-		if (currentOnTime < settings.minFanOnTime) {
-    		if (vacationHold && settings.vacationOverride) {
-        		settings.theThermostat.setVacationFanMinOnTime(settings.minFanOnTime)
-            	currentOnTime = settings.minFanOnTime
+		if (currentOnTime < minFanOnTime) {
+    		if (vacationHold && vacationOverride) {
+        		theThermostat.setVacationFanMinOnTime(minFanOnTime)
+            	currentOnTime = minFanOnTime
         	} else if (!vacationHold) {
-    			settings.theThermostat.setFanMinOnTime(settings.minFanOnTime)
-            	currentOnTime = settings.minFanOnTime
+    			theThermostat.setFanMinOnTime(minFanOnTime)
+            	currentOnTime = minFanOnTime
         	}
-    	} else if (currentOnTime > settings.maxFanOnTime) {
-    		if (vacationHold && settings.vacationOverride) {
-        		settings.theThermostat.setVacationFanMinOnTime(settings.maxFanOnTime)
-        		currentOnTime = settings.maxFanOnTime
+    	} else if (currentOnTime > maxFanOnTime) {
+    		if (vacationHold && vacationOverride) {
+        		theThermostat.setVacationFanMinOnTime(maxFanOnTime)
+        		currentOnTime = maxFanOnTime
         	} else if (!vacationHold) {
-    			settings.theThermostat.setFanMinOnTime(settings.maxFanOnTime)
-        		currentOnTime = settings.maxFanOnTime
+    			theThermostat.setFanMinOnTime(maxFanOnTime)
+        		currentOnTime = maxFanOnTime
         	}
     	}
-        if (!vacationHold) deltaHandler()
     }
     def vaca = vacationHold ? " is in Vacation mode, " : " "    
-    LOG("thermostat ${settings.theThermostat}${vaca}circulation time is now ${currentOnTime} minutes/hour",2,"",'info')
-	atomicState.fanSinceLastAdjustment = true    
+    LOG("thermostat ${theThermostat}${vaca}circulation time is now ${currentOnTime} min/hr",2,"",'info')
+	atomicState.fanSinceLastAdjustment = true
+    if (isOK) deltaHandler()
     LOG("Initialization complete", 4, "", 'trace')
 }
 
+def modeOrProgramHandler(evt=null) {
+	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
+    def isOK = true
+    if (theModes || thePrograms) {
+    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : false)
+    }
+	atomicState.isOK = isOK
+    
+    if (evt && (evt.name == "thermostatOperatingState") && !atomicState.fanSinceLastAdjustment) {
+    	if ((evt.value != 'idle') && (!evt.value.contains('ending'))) atomicState.fanSinceLastAdjustment = true // [fan only, heating, cooling] but not [idle, pending heat, pending cool]
+    }
+	deltaHandler(evt)
+}
+
 def deltaHandler(evt=null) {
-	def skipIt = false
-	// silently refuse to run if not in proper mode or program
-	if (settings.theModes && !settings.theModes?.contains(location.mode)) skipIt = true  	
-    if (settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) skipIt = true
-    if (skipIt) {
-    	atomicState.amIRunning = false
+	def isOK = atomicState.isOK
+    if ((isOK!=null) && (isOK==false)) {
+    	if (atomicState.amIRunning) atomicState.amIRunning = false
         return
     }
     
-	def vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
-	if (!settings.vacationOverride && vacationHold) {
-    	LOG("${settings.theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 4, "", 'warn')
+	def vacationHold = (theThermostat.currentValue("currentProgramName") == "Vacation")
+	if (!vacationOverride && vacationHold) {
+    	LOG("${theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 4, "", 'warn')
         atomicState.amIRunning = false
         return
     }
     
 	if (evt) {
-        if ((evt.name == "thermostatOperatingState") && !atomicState.fanSinceLastAdjustment) {
-    		if ((evt.value != 'idle') && (!evt.value.contains('ending'))) atomicState.fanSinceLastAdjustment = true
-    	}
         LOG("deltaHandler() entered with event ${evt.name}: ${evt.value}", 4, "", 'trace')
     } else {
     	LOG("deltaHandler() called directly", 4, "", 'trace')
@@ -208,7 +216,7 @@ def deltaHandler(evt=null) {
     def temps = []
     Double total = 0.0
     def i=0
-    settings.theSensors.each {
+    theSensors.each {
     	def temp = it.currentValue("temperature")
     	if (temp.isNumber() && (temp > 0)) {
         	temps += [temp]	// we want to deal with valid inside temperatures only
@@ -235,16 +243,16 @@ def deltaHandler(evt=null) {
     atomicState.minDelta = atomicState.minDelta.toDouble() < delta ? atomicState.minDelta: delta
     
     // Makes no sense to change fanMinOnTime while heating or cooling is running - take action ONLY on events while idle or fan is running
-    def statState = settings.theThermostat.currentValue("thermostatOperatingState")
+    def statState = theThermostat.currentValue("thermostatOperatingState")
     if ((statState != 'idle') && (statState != 'fan only')) {
-    	LOG("${settings.theThermostat} is ${statState}, no adjustments made", 4, "", 'trace' )
+    	LOG("${theThermostat} is ${statState}, no adjustments made", 4, "", 'trace' )
         atomicState.amIRunning = false
         return
     }
 
     if (atomicState.lastAdjustmentTime) {
         def timeNow = now()
-        def minutesLeft = settings.fanAdjustMinutes - ((timeNow - atomicState.lastAdjustmentTime) / 60000).toInteger()
+        def minutesLeft = fanAdjustMinutes - ((timeNow - atomicState.lastAdjustmentTime) / 60000).toInteger()
         if (minutesLeft >0) {
             LOG("Not time to adjust yet - ${minutesLeft} minutes left",4,'','trace')
             atomicState.amIRunning = false
@@ -252,20 +260,20 @@ def deltaHandler(evt=null) {
 		}
 	}
     
-    Integer currentOnTime = settings.theThermostat.currentValue('fanMinOnTime').toInteger()	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
+    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger()	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
 	Integer newOnTime = currentOnTime
 	
-	if (delta >= settings.deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
-		newOnTime = currentOnTime + settings.fanOnTimeDelta
-		if (newOnTime > settings.maxFanOnTime) {
-			newOnTime = settings.maxFanOnTime
+	if (delta >= deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
+		newOnTime = currentOnTime + fanOnTimeDelta
+		if (newOnTime > maxFanOnTime) {
+			newOnTime = maxFanOnTime
 		}
 		if (currentOnTime != newOnTime) {
-			LOG("Temperature delta is ${String.format("%.2f",delta)}/${settings.deltaTemp}, increasing circulation time for ${settings.theThermostat} to ${newOnTime} minutes",2,"",'info')
+			LOG("Temperature delta is ${String.format("%.2f",delta)}/${deltaTemp}, increasing circulation time for ${theThermostat} to ${newOnTime} min/hr",2,"",'info')
 			if (vacationHold) {
-            	settings.theThermostat.setVacationFanMinOnTime(newOnTime)
+            	theThermostat.setVacationFanMinOnTime(newOnTime)
             } else {
-            	settings.theThermostat.setFanMinOnTime(newOnTime)
+            	theThermostat.setFanMinOnTime(newOnTime)
             }
             atomicState.fanSinceLastAdjustment = false
 			atomicState.lastAdjustmentTime = now()
@@ -275,18 +283,18 @@ def deltaHandler(evt=null) {
 	} else {
         Double target = (getTemperatureScale() == "C") ? 0.55 : 1.0
         //atomicState.target = target
-        if (target > settings.deltaTemp.toDouble()) target = (settings.deltaTemp.toDouble() * 0.66667).round(2)	// arbitrary - we have to be less than deltaTemp
+        if (target > deltaTemp.toDouble()) target = (deltaTemp.toDouble() * 0.66667).round(2)	// arbitrary - we have to be less than deltaTemp
     	if (delta <= target) {			// start adjusting back downwards once we get within 1F or .5556C
-			newOnTime = currentOnTime - settings.fanOnTimeDelta
-			if (newOnTime < settings.minFanOnTime) {
-				newOnTime = settings.minFanOnTime
+			newOnTime = currentOnTime - fanOnTimeDelta
+			if (newOnTime < minFanOnTime) {
+				newOnTime = minFanOnTime
 			}
             if (currentOnTime != newOnTime) {
-           		LOG("Temperature delta is ${String.format("%.2f",delta)}/${String.format("%.2f",target)}, decreasing circulation time for ${settings.theThermostat} to ${newOnTime} minutes",2,"",'info')
+           		LOG("Temperature delta is ${String.format("%.2f",delta)}/${String.format("%.2f",target)}, decreasing circulation time for ${theThermostat} to ${newOnTime} min/hr",2,"",'info')
 				if (vacationHold) {
-                	settings.theThermostat.setVacationFanMinOnTime(newOnTime)
+                	theThermostat.setVacationFanMinOnTime(newOnTime)
                 } else {
-                	settings.theThermostat.setFanMinOnTime(newOnTime)
+                	theThermostat.setFanMinOnTime(newOnTime)
                 }
                 atomicState.fanSinceLastAdjustment = false
 				atomicState.lastAdjustmentTime = now()
@@ -295,7 +303,7 @@ def deltaHandler(evt=null) {
             }
 		}
 	}
-	LOG("No adjustment required",4,"",'trace')
+	LOG("No adjustment made",4,"",'trace')
     atomicState.amIRunning = false
 }
 
