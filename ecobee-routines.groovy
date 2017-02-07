@@ -13,19 +13,15 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	Updated by Barry A. Burke (storageanarchy@gmail.com)
- *	Updated 2017-01-28
- *  https://github.com/SANdood/Ecobee/
- *
- *	0.1.6 - Beta release of Barry's version
  */
 def getVersionNum() { return "0.1.6" }
 private def getVersionLabel() { return "ecobee Routines Version ${getVersionNum()}" }
 
 /*
  *
- * 0.1.5 - SendNotificationMessage so that the action shows up in Notification log after the mode/routine notices
  * 0.1.4 - Fix Custom Mode Handling
+ * 0.1.5 - SendNotificationMessage so that the action shows up in Notification log after the mode/routine notices
+ * 0.1.6 - Logic tweaks, fixed bad state.variableNames
  *
  */
 
@@ -205,7 +201,7 @@ private def normalizeSettings() {
 }
 
 def changeProgramHandler(evt) {
-	LOG("changeProgramHander() entered with evt: ${evt}", 5)
+	LOG("changeProgramHander() entered with evt: ${evt.name}: ${evt.value}", 5)
 	
     def gotEvent 
     if (settings.modeOrRoutine == "Routine") {
@@ -221,37 +217,37 @@ def changeProgramHandler(evt) {
     }
     
     settings.myThermostats.each { stat ->
-    	LOG("In each loop: Working on stat: ${stat}", 4, null, "trace")
+    	LOG("In each loop: Working on stat: ${stat}", 4, null, 'trace')
     	// First let's change the Thermostat Program
         if(state.doResumeProgram == true) {
-        	LOG("Resuming Program for ${stat}", 4, null, "trace")
+        	LOG("Resuming Program for ${stat}", 4, null, 'trace')
             if (stat.currentValue("thermostatHold") == 'hold') {
             	def scheduledProgram = stat.currentValue("scheduledProgram")
-        		stat.resumeProgram()
+        		stat.resumeProgram(true) // resumeAll to get back to the schedules program
 				sendNotificationEvent("And I resumed the scheduled ${scheduledProgram} program on ${stat}.")
             }
         } else {
-        	LOG("Setting Thermostat Program to programParam: ${state.programParam} and holdType: ${state.holdTypeParam}", 4, null, "trace")
+        	LOG("Setting Thermostat Program to programParam: ${state.programParam} and holdType: ${state.holdTypeParam}", 4, null, 'trace')
             
             boolean done = false
             def thermostatHold = stat.currentValue('thermostatHold')
-            if (stat.currentValue("currentProgram") == state.programParam) {
+            if (stat.currentValue('currentProgram') == state.programParam) {
             	if (thermostatHold == "") {
-                	sendNotificationEvent("And I verified that ${stat} is already in the ${state.program} program.")
+                	sendNotificationEvent("And I verified that ${stat} is already in the ${state.programParam} program.")
                     done = true
                 }
-            } else if (thermostatHold == "hold") {
-                if (stat.currentValue("scheduledProgram") == state.programParam) {
-                    if (state.programParam == "nextTransition") {
-                    	stat.resumeProgram()	// get back to the scheduled program
-                        sendNotificationEvent("And I resumed the scheduled ${state.program} on ${stat}.")
+            } else if (thermostatHold == 'hold') {
+                if (stat.currentValue('scheduledProgram') == state.programParam) {
+                    if (state.programParam == 'nextTransition') {
+                    	stat.resumeProgram(true)	// resumeAll to get back to the originally scheduled program
+                        sendNotificationEvent("And I resumed the scheduled ${state.programParam} on ${stat}.")
                         done = true
                     }
                 }
             }
             if (!done) {    
         		stat.setThermostatProgram(state.programParam, state.holdTypeParam)
-				sendNotificationEvent("And I set ${stat} to the ${state.programParam} program${(state.holdType!='nextTransition')?' indefinitely':'.'}")
+				sendNotificationEvent("And I set ${stat} to the ${state.programParam} program${(state.holdTypeParam!='nextTransition') ? ' indefinitely.' : '.'}")
             }
 		}
         if (state.fanCommand != "" && state.fanCommand != null) stat."${state.fanCommand}"()
@@ -263,4 +259,5 @@ def changeProgramHandler(evt) {
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
 	parent.LOG(message, level, child, logType, event, displayEvent)
+    log.info(message)
 }
