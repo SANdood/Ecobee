@@ -36,6 +36,7 @@
  *	0.10.7 - Fix heat/cool setpoint tiles
  *	0.10.8 - Added programsList attribute - list of available "climates" on this thermostat
  *  0.10.9 - Fixed double FtoC conversions
+ *	0.10.9a- Minor tweaks to LOG texts
  *
  */
 
@@ -928,7 +929,7 @@ void resumeProgram(resumeAll=true) {
 		sendEvent("name":"resumeProgram", "value":"resume", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 	} else {
 		sendEvent("name":"thermostatStatus", "value":"failed resume, click refresh", "description":statusText, displayed: false)
-		LOG("Error resumeProgram() check parent.resumeProgram(this, deviceId)", 2, null, "error")
+		LOG("Error resumeProgram() check parent.resumeProgram(this, ${deviceId}, ${resumeAll})", 2, null, "error")
 	}
 
 	generateSetpointEvent()
@@ -1027,12 +1028,13 @@ void setThermostatProgram(program, holdType=null) {
 	if (sendHoldType == 'nextTransition') {
 		if (device.currentValue("scheduledProgram") == program) {
 			LOG("setThermostatProgram() - resuming scheduled program ${program}", 3, this, 'info')
-			resumeProgram()
+			resumeProgram(true)	// resumeAll so that we get back to scheduled program
 			return
 		}
 	}
   
     if ( parent.setProgram(this, program, deviceId, sendHoldType) ) {
+    	log.debug "Success setting program to ${program}!"
 		generateProgramEvent(program)
 	} else {
     	LOG("Error setting new comfort setting ${program}.", 2, this, "warn")
@@ -1549,7 +1551,8 @@ private def LOG(message, level=3, child=null, logType="debug", event=false, disp
     	log."${logType}" "${prefix}${message}"
         // log.debug message
         if (event) { debugEvent(message, displayEvent) }        
-	}    
+	}  
+    if (level < 4) log.info message
 }
 
 private def debugEvent(message, displayEvent = false) {
