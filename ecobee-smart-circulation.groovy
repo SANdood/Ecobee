@@ -17,10 +17,11 @@
  *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
  *	0.1.3	01/29/2017	Barry Burke -	Added configurable support for overriding fanMinOnTime during Vacation holds
  *	0.1.4	02/04/2017 	Barry Burke	-	Added ability to specify both modes and programsList for when a handler should/can run
+ *	0.1.5	0s/06/2017	Barry Burke -	Android fix (bad range in min/maxFanOnTime settings)
  *
  */
-def getVersionNum() { return "0.1.4" }
-private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
+def getVersionNum() { return "0.1.5" }
+private def getVersionLabel() { return "ecobee Smart Circulation Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
 definition(
@@ -41,49 +42,41 @@ preferences {
 
 // Preferences Pages
 def mainPage() {
-	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true, nextPage: "") {
+	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true) {
     	section(title: "Name for Smart Circulation Handler") {
         	label title: "Name this Smart Circulation Handler", required: true      
         }
         
         section(title: "Select Thermostat") {
         	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-        	input (name: "theThermostat", type:"capability.thermostat", title: "Use which Ecobee Thermostat", required: true, 
-				   multiple: false, submitOnChange: true)            
+        	input(name: "theThermostat", type:"capability.Thermostat", title: "Use which Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)            
 		}
                 
         section(title: "Select Temperature Sensors") {
-            input(name: "theSensors", title: "Use which temperature sensor(s)", type: "capability.temperatureMeasurement", 
-				  required: true, multiple: true, submitOnChange: true)
+            input(name: "theSensors", title: "Use which temperature sensor(s)", type: "capability.temperatureMeasurement", required: true, multiple: true, submitOnChange: true)
 		}
         
-        section(title: "Fan On Time Automation Configuration") {
+       	section(title: "Fan On Time Automation Configuration") {
         	paragraph("Increase Circulation time (min/hr) when the difference between the maximum and the minimum temperature reading of the above sensors is more than this.")
-            input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true,
-				  defaultValue: "2.0", /* description: "2.0", */ multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
+            input(name: "deltaTemp", type: "enum", title: "Select temperature delta", required: true, defaultValue: "2.0", multiple:false, options:["1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0", "7.5", "10.0"])
             paragraph("Minimum Circulation time (min/hr). Includes heating, cooling and fan only minutes.")
-            input(name: "minFanOnTime", type: "number", title: "Set minimum fan on min/hr (0-55)", required: true,
-				   defaultValue: "5", description: "5", range: "0..55", submitOnChange: true)
+            input(name: "minFanOnTime", type: "number", title: "Set minimum fan on min/hr (0-${maxFanOnTime?maxFanOnTime:55})", required: true, defaultValue: "5", description: "5", range: "0..${maxFanOnTime?maxFanOnTime:55}", submitOnChange: true)
             paragraph("Maximum Circulation time (min/hr).")
-            input(name: "maxFanOnTime", type: "number", title: "Set maximum fan on min/hr (${minFanOnTime?minFanOnTime:0}-55)", required: true,
-				   defaultValue: "55", description: "55", range: '${minFanOnTime}..55', submitOnChange: true)
+            input(name: "maxFanOnTime", type: "number", title: "Set maximum fan on min/hr (${minFanOnTime?minFanOnTime:5}-55)", required: true, defaultValue: "55", description: "55", range: "${minFanOnTime?minFanOnTime:5}..55", submitOnChange: true)
             paragraph("Adjust Circulation time (min/hr) by this many minutes each adjustment.")
-            input (name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true,
-				   defaultValue: "5", description: "5", range: "1..20")
+            input(name: "fanOnTimeDelta", type: "number", title: "Minutes per adjustment (1-20)", required: true, defaultValue: "5", description: "5", range: "1..20")
             paragraph("Minimum number of minutes between adjustments.")
-            input (name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true,
-				   defaultValue: "10", description: "15", range: "5..60")
+            input(name: "fanAdjustMinutes", type: "number", title: "Time adjustment frequency in minutes (5-60)", required: true, defaultValue: "10", description: "15", range: "5..60")
         }
-        
+       
         section(title: "Vacation Hold Override") {
         	paragraph("The thermostat's Circulation setting is overridden when a Vacation is in effect. If you would like to automate the Circulation time during a Vacation hold, enable this setting.")
-            input(name: "vacationOverride", type: "boolean", title: "Override fan during Vacation hold?", defaulValue: false)
+            input(name: "vacationOverride", type: "bool", title: "Override fan during Vacation hold?", defaulValue: false)
         }
        
 		section(title: "Enable only for specific modes or programs?") {
-        	paragraph("Circulation time (min/hr) is only adjusted while in these modes and/or programs. The time will remain at the last setting while in other modes. " +
-            			"If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
-            input(name: "modes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
+        	paragraph("Circulation time (min/hr) is only adjusted while in these modes and/or programs. The time will remain at the last setting while in other modes. If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
+            input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
             input(name: "programs", type: "enum", title: "Only when the ${theThermostat ? theThermostat : 'thermostat'} Program is", multiple: true, required: false, options: getProgramsList())
         }
 		
@@ -91,7 +84,7 @@ def mainPage() {
         	input(name: "tempDisable", title: "Temporarily Disable Handler? ", type: "bool", required: false, description: "", submitOnChange: true)                
         }
         
-        section (getVersionLabel()) {}
+        section (getVersionLabel())
     }
 }
 
@@ -145,13 +138,13 @@ def initialize() {
 	def programsList = []
     programsList = new JsonSlurper().parseText(theThermostat.currentValue('programsList'))
     
-	log.debug "settings ${modes}, location ${location.mode}, programs ${programs} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
+	log.debug "settings ${theModes}, location ${location.mode}, programs ${programs} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
     log.debug "programs list contains current program: ${programsList.contains(theThermostat.currentValue('currentProgram'))}"
     log.debug "${programsList[0]}, ${programsList[1]} ${programsList.size()}"
    
 	// only adjust if we are currently in one of the allowed modes
     def isOK = true
-	if (settings.modes && !settings.modes.contains(location.mode)) isOK = false
+	if (settings.theModes && !settings.theModes.contains(location.mode)) isOK = false
     if (isOK && settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) isOK = false
     
     if (isOK) {	
@@ -181,13 +174,19 @@ def initialize() {
 }
 
 def deltaHandler(evt=null) {
+	def skipIt = false
 	// silently refuse to run if not in proper mode or program
-	if (settings.modes && !settings.modes?.contains(location.mode)) return  	
-    if (settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) return
+	if (settings.theModes && !settings.theModes?.contains(location.mode)) skipIt = true  	
+    if (settings.programs && !settings.programs?.contains(theThermostat.currentValue('currentProgram'))) skipIt = true
+    if (skipIt) {
+    	atomicState.amIRunning = false
+        return
+    }
     
 	def vacationHold = (settings.theThermostat.currentValue("currentProgramName") == "Vacation")
 	if (!settings.vacationOverride && vacationHold) {
     	LOG("${settings.theThermostat} is in Vacation mode, but not configured to override Vacation fanMinOnTime, returning", 4, "", 'warn')
+        atomicState.amIRunning = false
         return
     }
     
@@ -200,15 +199,26 @@ def deltaHandler(evt=null) {
     	LOG("deltaHandler() called directly", 4, "", 'trace')
     }
 
+	// reset the amIRunning sequencer if it gets hung for more than an hour
+	if (atomicState.lastCheckTime && ((now() - atomicState.lastCheckTime) > 3600000)) atomicState.amIRunning = false
     if (atomicState.amIRunning) {return} else {atomicState.amIRunning = true}
+    atomicState.lastCheckTime = now()
     
     // parse temps - ecobee sensors can return "unknown", others may return
-    def temps = [] 
+    def temps = []
+    Double total = 0.0
+    def i=0
     settings.theSensors.each {
     	def temp = it.currentValue("temperature")
-    	if (temp.isNumber() && (temp > 0)) temps += [temp]	// we want to deal with valid inside temperatures only
+    	if (temp.isNumber() && (temp > 0)) {
+        	temps += [temp]	// we want to deal with valid inside temperatures only
+            total = total + temp.toDouble()
+            i = i + 1
+        }
     }
-    LOG("Current temperature readings: ${temps}", 4, "", 'trace')
+    Double avg = total / i.toDouble()
+    
+    LOG("Current temperature readings: ${temps}, average is ${String.format("%.3f",avg)}", 4, "", 'trace')
     if (temps.size() < 2) {				// ignore if we don't have enough valid data
     	LOG("Only recieved ${temps.size()} valid temperature readings, skipping...",3,"",'warn')
     	atomicState.amIRunning = false
