@@ -56,7 +56,7 @@
  *
  *
  */  
-def getVersionNum() { return "0.10.18" }
+def getVersionNum() { return "0.10.18a" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1000,8 +1000,9 @@ def userDefinedEvent(evt) {
 }
 
 def scheduleWatchdog(evt=null, local=false) {
-	def results = true    
-    LOG("scheduleWatchdog() called with: evt (${evt?.name}:${evt?.value}) & local (${local})", 4, null, "trace")
+	def results = true  
+    def evtStr = evt ? "${evt.name}:{$evt.value}" : 'null'
+    LOG("scheduleWatchdog() called with evt (${evtStr}) & local (${local})", 4, null, "trace")
     // Only update the Scheduled timestamp if it is not a local action or from a subscription
     if ( (evt == null) && (local==false) ) {
     	atomicState.lastScheduledWatchdog = now()
@@ -1015,7 +1016,7 @@ def scheduleWatchdog(evt=null, local=false) {
         def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 1
         LOG("scheduleWatchdog() - token expires in ${expiry/60000} minutes",4,"",'trace')
     	if (expiry <= (atomicState.watchdogInterval*60500)) { 
-    		LOG("scheduleWatchdog() - preemptive call to refreshAuthToken(), ${expiry/60000} minutes to expiry",4,"",'trace')
+    		LOG("scheduleWatchdog() - refreshing Auth Token, ${expiry/60000} minutes to expiry",3,"",'trace')
         	refreshAuthToken()
     	}
 	}
@@ -1053,7 +1054,7 @@ def scheduleWatchdog(evt=null, local=false) {
         // check if token is going to expire within the next 15+ minutes (before the next scheduled watchdog) - if so, refresh it now to avoid the errors
         def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 1
     	if (expiry <= (atomicState.watchdogInterval*60500)) { 
-    		LOG("scheduleWatchdog() - preemptive call to refreshAuthToken(), ${expiry/60000} minutes to expiry (watchdog died)",4,"","trace")
+    		LOG("scheduleWatchdog() - preemptive call to refreshAuthToken(), ${expiry/60000} minutes to expiry (watchdog died)",3,"","warn")
         	refreshAuthToken()
     	}
     	spawnDaemon("watchdog") 
@@ -1155,9 +1156,10 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
 				def watchdogInterval = atomicState.watchdogInterval
 				if (timeList.contains("${watchdogInterval}")) {
         			"runEvery${watchdogInterval}Minutes"("scheduleWatchdog")
+                    atomicState.watchdogMinutes = 0
 				} else {
-					int randomSeconds = rand.nextInt(59)
-					int randomMinutes = rand.nextInt(watchdogInterval.toInteger())
+					int randomSeconds = rand.nextInt(60)	// reutrns 0-59
+					int randomMinutes = rand.nextInt(4)		// returns 0-3
 					atomicState.watchdogMinutes = randomMinutes
 					LOG("Using schedule instead of runEvery with scheduleWatchdog: ${watchdogInterval}", 4)
 					schedule("${randomSeconds} ${randomMinutes}/${watchdogInterval} * * * ?", "scheduleWatchdog")
