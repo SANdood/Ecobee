@@ -50,10 +50,11 @@
  *	0.10.13- Added sending programsList (list of available ecobee climates) to thermostat(s)
  *	0.10.14- Reduced frequency of sending of never/rarely changing objects to the Thermostat(s)
  *	0.10.15- Converted heat/cool ranges to C when appropriate
+ *	0.10.16- Proactively refresh the AuthToken if the expiration time is less than the watchdog schedule
  *
  *
  */  
-def getVersionNum() { return "0.10.15" }
+def getVersionNum() { return "0.10.16" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1001,6 +1002,14 @@ def scheduleWatchdog(evt=null, local=false) {
     	atomicState.lastScheduledWatchdog = now()
         atomicState.lastScheduledWatchdogDate = getTimestamp()
         atomicState.getWeather = true								// next pollEcobeeApi for runtime changes should also get the weather object
+        
+        // check if token is going to expire within the next 15+ minutes (before the next scheduled watchdog) - if so, refresh it now to avoid the errors
+        def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 1
+        LOG("scheduleWatchdog() - token expires in ${expiry/60000} minutes",4,"",'trace')
+    	if (expiry <= (atomicState.watchdogInterval*60500)) { 
+    		LOG("scheduleWatchdog() - preemptive call to refreshAuthToken(), ${expiry/60000} minutes to expiry",4,"",'trace')
+        	refreshAuthToken()
+    	}
 	}
     
     // Check to see if we have called too soon
@@ -1032,7 +1041,15 @@ def scheduleWatchdog(evt=null, local=false) {
     
     // Reschedule polling if it has been a while since the previous poll    
     if (!pollAlive) { spawnDaemon("poll") }
-    if (!watchdogAlive) { spawnDaemon("watchdog") }
+    if (!watchdogAlive) { 
+        // check if token is going to expire within the next 15+ minutes (before the next scheduled watchdog) - if so, refresh it now to avoid the errors
+        def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 1
+    	if (expiry <= (atomicState.watchdogInterval*60500)) { 
+    		LOG("scheduleWatchdog() - preemptive call to refreshAuthToken(), ${expiry/60000} minutes to expiry (watchdog died)",4,"","trace")
+        	refreshAuthToken()
+    	}
+    	spawnDaemon("watchdog") 
+    }
 
     return true
 }
@@ -2110,11 +2127,11 @@ def updateThermostatData() {
             }
 		}
         
-//        if (debugLevel(3)) {
-//			LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid})", 2, null, 'info')
-//        } else {
-        	LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 3, null, 'trace')
-//        }
+        if (debugLevel(3)) {
+			LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid})", 2, null, 'info')
+        } else {
+        	LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
+        }
 
 		collector[dni] = [thermostatId:tid, data:data]
 		// i++
@@ -2165,9 +2182,9 @@ private refreshAuthToken(child=null) {
 		def jsonMap
         try {            
             httpPost(refreshParams) { resp ->
-				LOG("Inside httpPost resp handling.", 3, child, "debug")
+				LOG("Inside httpPost resp handling.", 4, child, "trace")
                 if(resp.status == 200) {
-                    LOG("refreshAuthToken() - 200 Response received - Extracting info." )
+                    LOG("refreshAuthToken() - 200 Response received - Extracting info.", 4, child, 'trace' )
                     atomicState.reAttempt = 0 
                     apiRestored()                    
                     generateEventLocalParams() // Update the connected state at the thermostat devices
@@ -2182,26 +2199,26 @@ private refreshAuthToken(child=null) {
                         
                         // TODO - Platform BUG: This was not updating the state values for some reason if we use resp.data directly??? 
                         // 		  Workaround using jsonMap for authToken                       
-                        LOG("atomicState.authToken before: ${atomicState.authToken}", 4, child)
+                        LOG("atomicState.authToken before: ${atomicState.authToken}", 4, child, "trace")
                         def oldAuthToken = atomicState.authToken
                         atomicState.authToken = jsonMap?.access_token  
-						LOG("atomicState.authToken after: ${atomicState.authToken}", 4, child)
+						LOG("atomicState.authToken after: ${atomicState.authToken}", 4, child, "trace")
                         if (oldAuthToken == atomicState.authToken) { 
                         	LOG("WARN: atomicState.authToken did NOT update properly! This is likely a transient problem.", 1, child, "warn")
 						}
 
                         
                         // Save the expiry time for debugging purposes
-                        LOG("Expires in ${resp?.data?.expires_in} seconds", 3, child)
+                        LOG("refreshAuthToken() - Success! Token expires in ${resp?.data?.expires_in} seconds", 3, child, "info")
                         atomicState.authTokenExpires = (resp?.data?.expires_in * 1000) + now()
                         LOG("Updated state.authTokenExpires = ${atomicState.authTokenExpires}", 4, child, "trace")
 
-						LOG("Refresh Token = state =${atomicState.refreshToken}  == in: ${resp?.data?.refresh_token}", 4, child)
-                        LOG("OAUTH Token = state ${atomicState.authToken} == in: ${resp?.data?.access_token}", 4, child)
+						LOG("Refresh Token = state =${atomicState.refreshToken}  == in: ${resp?.data?.refresh_token}", 4, child, "trace")
+                        LOG("OAUTH Token = state ${atomicState.authToken} == in: ${resp?.data?.access_token}", 4, child, "trace")
                         
 
                         if(atomicState.action && atomicState.action != "") {
-                            LOG("Token refreshed. Executing next action: ${atomicState.action}", 3, child)
+                            LOG("Token refreshed. Executing next action: ${atomicState.action}", 4, child, "trace")
                             "${atomicState.action}"()
 
                             // Reset saved action
@@ -2210,12 +2227,12 @@ private refreshAuthToken(child=null) {
                         }
 
                     } else {
-                    	LOG("No jsonMap??? ${jsonMap}", 2, child)
+                    	LOG("No jsonMap??? ${jsonMap}", 2, child, "trace")
                     }
                     
                     return true
                 } else {
-                    LOG("Refresh failed ${resp.status} : ${resp.status.code}!", 1, child, "error")
+                    LOG("refreshAuthToken() - Failed ${resp.status} : ${resp.status.code}!", 1, child, "error")
                     return false
                 }
             }
