@@ -51,10 +51,11 @@
  *	0.10.14- Reduced frequency of sending of never/rarely changing objects to the Thermostat(s)
  *	0.10.15- Converted heat/cool ranges to C when appropriate
  *	0.10.16- Proactively refresh the AuthToken if the expiration time is less than the watchdog schedule
+ *	0.10.17- Optimized sunrise/sunset handling, watchdogInterval and updateThermostat map creation 
  *
  *
  */  
-def getVersionNum() { return "0.10.16" }
+def getVersionNum() { return "0.10.17" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -805,8 +806,6 @@ def initialize() {
     atomicState.thermostatUpdated = true
     atomicState.forcePoll= true				// make sure we get ALL the data after initialization
     
-    atomicState.timeOfDay = getTimeOfDay()
-    
     def sunriseAndSunset = getSunriseAndSunset()
     // LOG("sunriseAndSunset == ${sunriseAndSunset}")
     if(location.timeZone) {
@@ -819,11 +818,14 @@ def initialize() {
     	atomicState.sunriseTime = "0500".toDouble()
         atomicState.sunsetTime = "1800".toDouble()
     }
+	
+	// Must do this AFTER setting up sunrise/sunset
+	atomicState.timeOfDay = getTimeOfDay()
 	    
     // Setup initial polling and determine polling intervals
 	atomicState.pollingInterval = getPollingInterval()
-    atomicState.watchdogInterval = 15
-    atomicState.reAttemptInterval = 15 // In seconds
+    atomicState.watchdogInterval = 15	// In minutes: 14/28/42/56<- scheduleWatchdog should refresh tokens with 4 minutes to spare
+    atomicState.reAttemptInterval = 15 	// In seconds
 	
     if (state.initialized) {		
     	// refresh Thermostats and Sensor full lists
@@ -957,6 +959,7 @@ def sunriseEvent(evt) {
     } else {
     	atomicState.sunriseTime = new Date().format("HHmm").toInteger()
     }
+	atomicState.getWeather = true	// force updating of the weather icon in the thermostat
     scheduleWatchdog(evt, true)    
 }
 
@@ -970,6 +973,7 @@ def sunsetEvent(evt) {
 	} else {
     	atomicState.sunsetTime = new Date().format("HHmm").toInteger()
     }
+	atomicState.getWeather = true	// force updating of the weather icon in the thermostat
     scheduleWatchdog(evt, true)
 }
 
@@ -1004,6 +1008,8 @@ def scheduleWatchdog(evt=null, local=false) {
         atomicState.getWeather = true								// next pollEcobeeApi for runtime changes should also get the weather object
         
         // check if token is going to expire within the next 15+ minutes (before the next scheduled watchdog) - if so, refresh it now to avoid the errors
+		// IMPORTANT: Token expires in 59 minutes & 59 seconds. By setting watchdogInterval to 14 minutes, we will refresh it after 56 minutes.
+		// This maximizes the useful lifetime of the token, and minimizes calls to refresh it.
         def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 1
         LOG("scheduleWatchdog() - token expires in ${expiry/60000} minutes",4,"",'trace')
     	if (expiry <= (atomicState.watchdogInterval*60500)) { 
@@ -1097,6 +1103,7 @@ private def Boolean isDaemonAlive(daemon="all") {
 private def Boolean spawnDaemon(daemon="all", unsched=true) {
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
+	Random rand = new Random()
 	
 	Integer pollingInterval = getPollingInterval().toInteger()
     
@@ -1110,9 +1117,10 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
             if( unsched ) { unschedule("pollScheduled") }
             if ( canSchedule() ) { 
             	LOG("Polling Interval == ${pollingInterval}", 4)
-            	if (pollingInterval <= 3) {
+            	if (pollingInterval < 5) {	// choices were 1,2,3,5,10,15,30
                 	LOG("Using schedule instead of runEvery with pollingInterval: ${pollingInterval}", 4)
-                	schedule("* 0/${pollingInterval} * * * ?", "pollScheduled")                    
+					int randomSeconds = rand.nextInt(59)
+					schedule("${randomSeconds} 0/${pollingInterval} * * * ?", "pollScheduled")                    
                 } else {
                 	LOG("Using runEvery to setup polling with pollingInterval: ${pollingInterval}", 4)
         			"runEvery${pollingInterval}Minutes"("pollScheduled")
@@ -1134,7 +1142,16 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
         try {
             if( unsched ) { unschedule("scheduleWatchdog") }
             if ( canSchedule() ) { 
-        		"runEvery${atomicState.watchdogInterval}Minutes"("scheduleWatchdog")
+				def timeList = ['5','10','15','30']
+				def watchdogInterval = atomicState.watchdogInterval
+				if (timeList.contains("${watchdogInterval}")) {
+        			"runEvery${watchdogInterval}Minutes"("scheduleWatchdog")
+				} else {
+					int randomSeconds = rand.nextInt(59)
+					int randomMinutes = rand.nextInt(watchdogInterval.toInteger())
+					LOG("Using schedule instead of runEvery with scheduleWatchdog: ${watchdogInterval}", 4)
+					schedule("${randomSeconds} ${randomMinutes}/${watchdogInterval} * * * ?", "scheduleWatchdog")
+				}
             	result = result && true
 			} else {
             	LOG("canSchedule() is NOT allowed or result already false! Unable to schedule daemon!", 1, null, "error")
@@ -1696,7 +1713,7 @@ def updateSensorData() {
 }
 
 def updateThermostatData() {
-	atomicState.timeOfDay = getTimeOfDay()
+	// atomicState.timeOfDay = getTimeOfDay() // shouldn't need to do this - sunrise/sunset events are maintaining it
 	def runtimeUpdated = atomicState.runtimeUpdated
     def thermostatUpdated = atomicState.thermostatUpdated
 	boolean usingMetric = wantMetric() // cache the value to save the function calls
@@ -1992,38 +2009,35 @@ def updateThermostatData() {
         
         // API link to Ecobee's Cloud status - doesn't change unless things get broken
         def cloudList = [lastPoll,apiConnection]
-        def cloudData = [
-        	lastPoll: lastPoll,
-            apiConnected: apiConnection,
-        ]
         if (forcePoll || (changeCloud == [:]) || !changeCloud[tid] || (changeCloud[tid] != cloudList)) { 
-            data += cloudData
+            data += [
+        		lastPoll: lastPoll,
+            	apiConnected: apiConnection,
+        	]
             changeCloud[tid] = cloudList
             atomicState.changeCloud = changeCloud
         }
         
         // SmartApp configuration settings that almost never change (Listed in order of frequency that they should change normally)
         def configList = [atomicState.timeOfDay,settings.tempDecimals,settings.debugLevel,getTemperatureScale()]
-        def configData = [
-        	timeOfDay: atomicState.timeOfDay,
-           	decimalPrecision: settings.tempDecimals,
-			temperatureScale: getTemperatureScale(),			
-			debugLevel: settings.debugLevel.toInteger(),
-        ]
         if (forcePoll || (changeConfig == [:]) || !changeConfig[tid] || (changeConfig[tid] != configList)) { 
-            data += configData
+            data += [
+        		timeOfDay: atomicState.timeOfDay,
+           		decimalPrecision: settings.tempDecimals,
+				temperatureScale: getTemperatureScale(),			
+				debugLevel: settings.debugLevel.toInteger(),
+        	]
             changeConfig[tid] = configList
             atomicState.changeConfig = changeConfig
         }
         
         // Equipment operating status - I *think* this can change with either thermostat or runtime changes
-		def equipData = [
-        	equipmentStatus: 		  equipStatus,
-            thermostatOperatingState: thermOpStat,
-            equipmentOperatingState:  equipOpStat,
-        ]
         if (forcePoll || (lastEquipStatus != equipStatus)) { 
-            data += equipData
+            data += [
+        		equipmentStatus: 		  equipStatus,
+            	thermostatOperatingState: thermOpStat,
+            	equipmentOperatingState:  equipOpStat,
+        	]
             changeEquip[tid] = equipStatus
             atomicState.changeEquip = changeEquip
         }
@@ -2037,53 +2051,51 @@ def updateThermostatData() {
             // Thermostat configuration stuff that almost never change
         	def neverList = [coolStages,heatStages,autoMode,statMode,heatHigh,heatLow,coolHigh,coolLow,heatRange,coolRange,climatesList,
         						hasHeatPump,hasForcedAir,hasElectric,hasBoiler,auxHeatMode,hasHumidifier,hasDehumidifier,heatDiff,coolDiff]
-         	def neverData = [
-				coolMode: (coolStages > 0),
-            	coolStages: coolStages,
-				heatMode: (heatStages > 0),
-            	heatStages: heatStages,
-				autoMode: autoMode,
-                thermostatMode: statMode,
-            	heatRangeHigh: heatHigh,
-            	heatRangeLow: heatLow,
-            	coolRangeHigh: coolHigh,
-            	coolRangeLow: coolLow,
-				heatRange: heatRange,
-				coolRange: coolRange,  
-                programsList: climatesList,
-                
-                hasHeatPump: hasHeatPump,
-            	hasForcedAir: hasForcedAir,
-            	hasElectric: hasElectric,
-            	hasBoiler: hasBoiler,
-				auxHeatMode: auxHeatMode,
-            	hasHumidifier: hasHumidifier,
-				hasDehumidifier: hasDehumidifier,
-                heatDifferential: heatDiff,
-                coolDifferential: coolDiff,
-            ]
             if (forcePoll || (changeNever == [:]) || !changeNever[tid] || (changeNever[tid] != neverList)) { 
-            	data += neverData
+            	data += [
+					coolMode: (coolStages > 0),
+            		coolStages: coolStages,
+					heatMode: (heatStages > 0),
+            		heatStages: heatStages,
+					autoMode: autoMode,
+                	thermostatMode: statMode,
+            		heatRangeHigh: heatHigh,
+            		heatRangeLow: heatLow,
+            		coolRangeHigh: coolHigh,
+            		coolRangeLow: coolLow,
+					heatRange: heatRange,
+					coolRange: coolRange,  
+                	programsList: climatesList,
+                
+                	hasHeatPump: hasHeatPump,
+            		hasForcedAir: hasForcedAir,
+            		hasElectric: hasElectric,
+            		hasBoiler: hasBoiler,
+					auxHeatMode: auxHeatMode,
+            		hasHumidifier: hasHumidifier,
+					hasDehumidifier: hasDehumidifier,
+                	heatDifferential: heatDiff,
+                	coolDifferential: coolDiff,
+            	]
             	changeNever[tid] = neverList
             	atomicState.changeNever = changeNever
         	}
             
             // Thermostat operational things that rarely change, (a few times a day at most)
          	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,currentClimateName,scheduledClimateName]
-          	def rarelyData = [
-          		thermostatHold: thermostatHold,
-                holdEndsAt: holdEndsAt,
-               	holdStatus: statusMsg,
- 				currentProgramName: currentClimateName,
-				currentProgramId: currentClimateId,
-				currentProgram: currentClimate,
-				scheduledProgramName: scheduledClimateName,
-				scheduledProgramId: scheduledClimateId,
-				scheduledProgram: scheduledClimateName,
-                fanMinOnTime: fanMinOnTime,
-          	]
             if (forcePoll || (changeRarely == [:]) || !changeRarely[tid] || (changeRarely[tid] != rarelyList)) { 
-            	data += rarelyData
+            	data += [
+          			thermostatHold: thermostatHold,
+                	holdEndsAt: holdEndsAt,
+               		holdStatus: statusMsg,
+ 					currentProgramName: currentClimateName,
+					currentProgramId: currentClimateId,
+					currentProgram: currentClimate,
+					scheduledProgramName: scheduledClimateName,
+					scheduledProgramId: scheduledClimateId,
+					scheduledProgram: scheduledClimateName,
+                	fanMinOnTime: fanMinOnTime,
+          		]
             	changeRarely[tid] = rarelyList
             	atomicState.changeRarely = changeRarely
         	}            
@@ -2099,15 +2111,14 @@ def updateThermostatData() {
             
             // the rest of runtime object changes often, but not every time runtime is updated
             def oftenList = [motion,tempHeatingSetpoint,tempCoolingSetpoint,thermostatFanMode,humiditySetpoint,settings.tempDecimals] // also send if decimal precision changes
-            def oftenData = [
-				heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint.toDouble().round(userPrecision)), // The other temps we'll adjust here
-				coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint.toDouble().round(userPrecision)), 
-				thermostatFanMode: currentFanMode,
-				humiditySetpoint: humiditySetpoint,
-				motion: occupancy,
-			]
             if (forcePoll || (changeOften == [:]) || !changeOften[tid] || (changeOften[tid] != oftenList)) { 
-            	data += oftenData
+            	data += [
+					heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint.toDouble().round(userPrecision)), // The other temps we'll adjust here
+					coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint.toDouble().round(userPrecision)), 
+					thermostatFanMode: currentFanMode,
+					humiditySetpoint: humiditySetpoint,
+					motion: occupancy,
+				]
             	changeOften[tid] = oftenList
             	atomicState.changeOften = changeOften
         	}
