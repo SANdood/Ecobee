@@ -54,11 +54,12 @@
  *	0.10.17- Optimized sunrise/sunset handling, watchdogInterval and updateThermostat map creation 
  *	0.10.18- Still more optimizations
  *	0.10.19- Revamped watchdog's refreshAuthToken strategy
- *	0.10.20- Added extendedRuntime for humiditySetpoint in Frost Control, fixed initialization errors on first install
+ *	0.10.20- Added extendedRuntime for humiditySetpoint in Frost Control, 
+ *	0.10.21- Yet another attempt to fixed initialization errors on first install
  *
  *
  */  
-def getVersionNum() { return "0.10.20a" }
+def getVersionNum() { return "0.10.21" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1495,44 +1496,41 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                         if (stat.weather) tempWeather[tid] = stat.weather
                     }
                 }
-                
-                def numTherms = atomicState.settingsCurrentTherms.size()
 				
 				if (tempEquipStat != [:]) {
-					if (atomicState.equipmentStatus && (tempEquipStat.size() != numTherms)) tempEquipStat = atomicState.equipmentStatus + tempEquipStat // get less than all, just add to the table
+					if (atomicState.equipmentStatus) tempEquipStat = atomicState.equipmentStatus + tempEquipStat
 					atomicState.equipmentStatus = tempEquipStat
 				}
                 if (forcePoll || thermostatUpdated) {
-                	if (tempSettings != [:]) {								// ignore settings cache if no data retrieved
-                   		if (atomicState.settings && (tempSettings.size() != numTherms)) tempSettings = atomicState.settings + tempSettings // got less than all, just add new to the cached Map
+                	if (tempSettings != [:]) {
+                   		if (atomicState.settings) tempSettings = atomicState.settings + tempSettings 
                    		atomicState.settings = tempSettings
                 	}
-                	if (tempProgram != [:]) {								// ignore program cache if no data retrieved
-                   		if (atomicState.program && (tempProgram.size() != numTherms)) tempProgram = atomicState.program + tempProgram // got less than all, just add new to the cached Map
+                	if (tempProgram != [:]) {
+                   		if (atomicState.program) tempProgram = atomicState.program + tempProgram 
                    		atomicState.program = tempProgram
                 	}
-                	if (tempEvents != [:]) {								// ignore events cache if no data retrieved
-                   		if (atomicState.events && (tempEvents.size() != numTherms)) tempEvents = atomicState.events + tempEvents // got less than all, just add new to the cached Map
+                	if (tempEvents != [:]) {
+                   		if (atomicState.events) tempEvents = atomicState.events + tempEvents
                    		atomicState.events = tempEvents
                 	}                    
                 }
                 if (forcePoll || runtimeUpdated) {
                     if (tempRuntime != [:]) {
-                    	if (atomicState.runtime && (tempRuntime.size() != numTherms)) tempRuntime = atomicState.runtime + tempRuntime // get less than all, just add to the table
+                    	if (atomicState.runtime) tempRuntime = atomicState.runtime + tempRuntime
                     	atomicState.runtime = tempRuntime
                     }
                     if (tempExtendedRuntime != [:]) {
-                    	if (atomicState.extendedRuntime && (tempExtendedRuntime.size() != numTherms)) tempExtendedRuntime = atomicState.extendedRuntime + tempExtendedRuntime
+                    	if (atomicState.extendedRuntime) tempExtendedRuntime = atomicState.extendedRuntime + tempExtendedRuntime
                     	atomicState.extendedRuntime = tempExtendedRuntime
                     }
                     if (tempSensors != [:]) {
-                    	if (atomicState.remoteSensors && (tempSensors.size() != numTherms)) tempSensors = atomicState.remoteSensors + tempSensors // get less than all, just add to the table
+                    	if (atomicState.remoteSensors) tempSensors = atomicState.remoteSensors + tempSensors 
                     	atomicState.remoteSensors = tempSensors
                     }
-                    //if (resp.data.thermostatList.remoteSensors) atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
                     
                     if (tempWeather != [:]) {
-                    	if (atomicState.weather && (tempWeather.size() != numTherms)) tempWeather = atomicState.weather + tempWeather // get less than all, just add to the table
+                    	if (atomicState.weather) tempWeather = atomicState.weather + tempWeather 
                     	atomicState.weather = tempWeather
                     }
 				}
