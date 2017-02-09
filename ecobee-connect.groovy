@@ -58,7 +58,7 @@
  *
  *
  */  
-def getVersionNum() { return "0.10.20" }
+def getVersionNum() { return "0.10.20a" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1927,9 +1927,9 @@ def updateThermostatData() {
 		// HUMIDITY
 		def humiditySetpoint = 0
         def humidity = runtime.desiredHumidity
-        if (extendedRuntime?.desiredHumidity) humidity = extendedRuntime.desiredHumidity[0]		// if supplied, extendedRuntime gives the actual target (Frost Control)
+        if (extendedRuntime?.desiredHumidity) humidity = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
         def dehumidity = runtime.desiredDehumidity
-        if (extendedRuntime?.desiredDehumidity) dehumidity = extendedRuntime.desiredDehumidity[0]	
+        if (extendedRuntime?.desiredDehumidity) dehumidity = extendedRuntime.desiredDehumidity[2]	
         def hasHumidifier = statSettings.hasHumidifier
         def hasDehumidifier = statSettings.hasDehumidifier || statSettings.dehumidifyWithAC // we can hide the details from the device handler
 		
