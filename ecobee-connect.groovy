@@ -54,10 +54,11 @@
  *	0.10.17- Optimized sunrise/sunset handling, watchdogInterval and updateThermostat map creation 
  *	0.10.18- Still more optimizations
  *	0.10.19- Revamped watchdog's refreshAuthToken strategy
+ *	0.10.20- Added extendedRuntime for humiditySetpoint in Frost Control, fixed initialization errors on first install
  *
  *
  */  
-def getVersionNum() { return "0.10.19" }
+def getVersionNum() { return "0.10.20" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -321,7 +322,7 @@ def preferencesPage() {
             paragraph "The 'Smart Auto Temperature Adjust' feature determines if you want to allow the thermostat setpoint to be changed using the arrow buttons in the Tile when the thermostat is in 'auto' mode."
             input(name: "smartAuto", title:"Use Smart Auto Temperature Adjust?", type: "bool", required:false, defaultValue: false, description: "")
             input(name: "pollingInterval", title:"Polling Interval (in Minutes)", type: "enum", required:false, multiple:false, defaultValue:5, description: "5", options:["1", "2", "3", "5", "10", "15", "30"])
-            input(name: "debugLevel", title:"Debugging Level (higher # for more information)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", metadata:[values:["5", "4", "3", "2", "1", "0"]])            
+            input(name: "debugLevel", title:"Debugging Level (higher # for more information)", type: "enum", required:false, multiple:false, defaultValue:3, description: "3", options:["5", "4", "3", "2", "1", "0"])            
             paragraph "Showing a Thermostat as a separate Sensor is useful if you need to access the actual temperature in the room where the Thermostat is located and not just the (average) temperature displayed on the Thermostat"
             input(name: "showThermsAsSensor", title:"Include Thermostats as a separate Ecobee Sensor?", type: "bool", required:false, defaultValue: false, description: "")
             paragraph "Monitoring external devices can be used to drive polling and the watchdog events. Be warned, however, not to select too many devices or devices that will send too many events as this can cause issues with the connection."
@@ -330,7 +331,7 @@ def preferencesPage() {
             input(name: "arrowPause", title:"Delay timer value after pressing setpoint arrows", type: "enum", required:false, multiple:false, description: "4", defaultValue:5, options:["1", "2", "3", "4", "5"])
 			paragraph "Set the desired number of decimal places to display for all temperatures (recommended 1 for C, 0 for F)."
 			String digits = wantMetric() ? "1" : "0"
-			input(name: "tempDecimals", title:"Decimal places to display", type: "enum", required:false, multiple:false, defaultValue:digits, description: digits, metadata:[values:["0", "1", "2"]])
+			input(name: "tempDecimals", title:"Decimal places to display", type: "enum", required:true, multiple:false, defaultValue:digits, description: digits, options:["0", "1", "2"], submitOnChange: true)
         }
 	}
 }
@@ -520,7 +521,6 @@ def callback() {
 	} else {
     	LOG("callback() failed oauthState != atomicState.oauthInitState", 1, null, "warn")
 	}
-
 }
 
 def success() {
@@ -1425,7 +1425,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 		gw += ' thermostat'
 	}
 	if (forcePoll || runtimeUpdated) {
-		jsonRequestBody += ',"includeRuntime":"true"'
+		jsonRequestBody += ',"includeRuntime":"true","includeExtendedRuntime":"true"'
         gw += ' runtime'
         // only get sensorData if we have any sensors configured
 		if (forcePoll || settings.ecobeesensors?.size() > 0) {
@@ -1471,6 +1471,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                 def tempProgram = [:]
                 def tempEvents = [:]
                 def tempRuntime = [:]
+                def tempExtendedRuntime = [:]
                 def tempWeather = [:]
                 def tempSensors = [:]
                 def tempEquipStat = [:]
@@ -1489,10 +1490,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     }
  					if (forcePoll || runtimeUpdated) {
  						if (stat.runtime) tempRuntime[tid] = stat.runtime
-                        if (stat.remoteSensors) {
-                        	tempSensors[tid] = stat.remoteSensors // should be blank unless we requested it specifically
-                            // sNames += stat.remoteSensors.name
-                        }
+                        if (stat.extendedRuntime) tempExtendedRuntime[tid] = stat.extendedRuntime
+                        if (stat.remoteSensors) tempSensors[tid] = stat.remoteSensors 
                         if (stat.weather) tempWeather[tid] = stat.weather
                     }
                 }
@@ -1500,36 +1499,40 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                 def numTherms = atomicState.settingsCurrentTherms.size()
 				
 				if (tempEquipStat != [:]) {
-					if (tempEquipStat.size() != numTherms) tempEquipStat = atomicState.equipmentStatus + tempEquipStat // get less than all, just add to the table
+					if (atomicState.equipmentStatus && (tempEquipStat.size() != numTherms)) tempEquipStat = atomicState.equipmentStatus + tempEquipStat // get less than all, just add to the table
 					atomicState.equipmentStatus = tempEquipStat
 				}
                 if (forcePoll || thermostatUpdated) {
                 	if (tempSettings != [:]) {								// ignore settings cache if no data retrieved
-                   		if (tempSettings.size() != numTherms) tempSettings = atomicState.settings + tempSettings // got less than all, just add new to the cached Map
+                   		if (atomicState.settings && (tempSettings.size() != numTherms)) tempSettings = atomicState.settings + tempSettings // got less than all, just add new to the cached Map
                    		atomicState.settings = tempSettings
                 	}
                 	if (tempProgram != [:]) {								// ignore program cache if no data retrieved
-                   		if (tempProgram.size() != numTherms) tempProgram = atomicState.program + tempProgram // got less than all, just add new to the cached Map
+                   		if (atomicState.program && (tempProgram.size() != numTherms)) tempProgram = atomicState.program + tempProgram // got less than all, just add new to the cached Map
                    		atomicState.program = tempProgram
                 	}
                 	if (tempEvents != [:]) {								// ignore events cache if no data retrieved
-                   		if (tempEvents.size() != numTherms) tempEvents = atomicState.events + tempEvents // got less than all, just add new to the cached Map
+                   		if (atomicState.events && (tempEvents.size() != numTherms)) tempEvents = atomicState.events + tempEvents // got less than all, just add new to the cached Map
                    		atomicState.events = tempEvents
                 	}                    
                 }
                 if (forcePoll || runtimeUpdated) {
                     if (tempRuntime != [:]) {
-                    	if (tempRuntime.size() != numTherms) tempRuntime = atomicState.runtime + tempRuntime // get less than all, just add to the table
+                    	if (atomicState.runtime && (tempRuntime.size() != numTherms)) tempRuntime = atomicState.runtime + tempRuntime // get less than all, just add to the table
                     	atomicState.runtime = tempRuntime
                     }
+                    if (tempExtendedRuntime != [:]) {
+                    	if (atomicState.extendedRuntime && (tempExtendedRuntime.size() != numTherms)) tempExtendedRuntime = atomicState.extendedRuntime + tempExtendedRuntime
+                    	atomicState.extendedRuntime = tempExtendedRuntime
+                    }
                     if (tempSensors != [:]) {
-                    	if (tempSensors.size() != numTherms) tempSensors = atomicState.remoteSensors + tempSensors // get less than all, just add to the table
+                    	if (atomicState.remoteSensors && (tempSensors.size() != numTherms)) tempSensors = atomicState.remoteSensors + tempSensors // get less than all, just add to the table
                     	atomicState.remoteSensors = tempSensors
                     }
                     //if (resp.data.thermostatList.remoteSensors) atomicState.remoteSensors = resp.data.thermostatList.remoteSensors
                     
                     if (tempWeather != [:]) {
-                    	if (tempWeather.size() != numTherms) tempWeather = atomicState.weather + tempWeather // get less than all, just add to the table
+                    	if (atomicState.weather && (tempWeather.size() != numTherms)) tempWeather = atomicState.weather + tempWeather // get less than all, just add to the table
                     	atomicState.weather = tempWeather
                     }
 				}
@@ -1729,6 +1732,7 @@ def updateThermostatData() {
         def program = atomicState.program ? atomicState.program[tid] : [:]
         def events = atomicState.events ? atomicState.events[tid] : [:]
         def runtime = atomicState.runtime ? atomicState.runtime[tid] : [:]
+        def extendedRuntime = atomicState.extendedRuntime ? atomicState.extendedRuntime[tid] : [:]
 		// not worth it - weather is only accessed twice, and it is a LOT of data
         // def weather = atomicState.weather ? atomicState.weather[tid] : [:]    
         
@@ -1848,7 +1852,7 @@ def updateThermostatData() {
 		LOG( "scheduledClimateId: ${scheduledClimateId}, scheduledClimateName: ${scheduledClimateName}, climatesList: ${climatesList.toString()}", 4, "", 'info')
         
 		// check which program is actually running now
-		if ( events && (events.size() > 0 )) {         
+		if (events?.size()) {         
         	runningEvent = events.find { 
             	LOG("Checking event: ${it}", 5) 
                 it.running == true
@@ -1923,7 +1927,9 @@ def updateThermostatData() {
 		// HUMIDITY
 		def humiditySetpoint = 0
         def humidity = runtime.desiredHumidity
+        if (extendedRuntime?.desiredHumidity) humidity = extendedRuntime.desiredHumidity[0]		// if supplied, extendedRuntime gives the actual target (Frost Control)
         def dehumidity = runtime.desiredDehumidity
+        if (extendedRuntime?.desiredDehumidity) dehumidity = extendedRuntime.desiredDehumidity[0]	
         def hasHumidifier = statSettings.hasHumidifier
         def hasDehumidifier = statSettings.hasDehumidifier || statSettings.dehumidifyWithAC // we can hide the details from the device handler
 		
