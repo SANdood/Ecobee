@@ -54,28 +54,28 @@
  *	0.10.17- Optimized sunrise/sunset handling, watchdogInterval and updateThermostat map creation 
  *	0.10.18- Still more optimizations
  *	0.10.19- Revamped watchdog's refreshAuthToken strategy
- *	0.10.20- Added extendedRuntime for humiditySetpoint in Frost Control, 
  *	0.10.21- Yet another attempt to fixed initialization errors on first install
+ *	0.10.22- Gotcha, dagnabbit! settings.vars weren't being initialized if Preferences page never opened
  *
  *
  */  
-def getVersionNum() { return "0.10.21" }
+def getVersionNum() { return "0.10.22" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
-    		[name: "ecobeeRoutinesChild", appName: "ecobee Routines",  
-            	namespace: "smartthings", multiple: true, 
-                title: "Create new Routines Handler..."], 
-			[name: "ecobeeContactsChild", appName: "ecobee Open Contacts",  
-            	namespace: "smartthings", multiple: true, 
-                title: "Create new Open Contacts SmartApp..."],
-            [name: "ecobeeCirculationChild", appName: "ecobee Smart Circulation",
-			 	namespace: "smartthings", multiple: true,
-			 	title: "Create new Smart Circulation Handler..."],
-			[name: "ecobeeZonesChild", appName: "ecobee Smart Zones",
-			 	namespace: "smartthings", multiple: true,
-			 	title: "Create new Smart Zone Handler..."]
-			]
+    	[name: "ecobeeRoutinesChild", appName: "ecobee Routines",  
+            namespace: "smartthings", multiple: true, 
+            title: "Create new Routines Handler..."], 
+		[name: "ecobeeContactsChild", appName: "ecobee Open Contacts",  
+            namespace: "smartthings", multiple: true, 
+            title: "Create new Open Contacts SmartApp..."],
+        [name: "ecobeeCirculationChild", appName: "ecobee Smart Circulation",
+			 namespace: "smartthings", multiple: true,
+			 title: "Create new Smart Circulation Handler..."],
+		[name: "ecobeeZonesChild", appName: "ecobee Smart Zones",
+			 namespace: "smartthings", multiple: true,
+			 title: "Create new Smart Zone Handler..."]
+	]
 }
  
 definition(
@@ -366,12 +366,13 @@ def debugDashboardPage() {
         }    	
         
     	section("Settings Information") {
-        	paragraph "debugLevel: ${settings.debugLevel} (default=3 if null)"
-            paragraph "holdType: ${settings.holdType} (default='Until I Change' if null)"
-            paragraph "pollingInterval: ${settings.pollingInterval} (default=5 if null)"
+        	paragraph "debugLevel: ${getDebugLevel()}"
+            paragraph "holdType: ${getHoldType()}"
+            paragraph "pollingInterval: ${getPollingInterval()}"
             paragraph "showThermsAsSensor: ${settings.showThermsAsSensor} (default=false if null)"
             paragraph "smartAuto: ${settings.smartAuto} (default=false if null)"   
             paragraph "Selected Thermostats: ${settings.thermostats}"
+            paragraph "Decimal Precision: ${getTempDecimals()}"
         }
         section("Dump of Debug Variables") {
         	def debugParamList = getDebugDump()
@@ -980,21 +981,22 @@ def sunsetEvent(evt) {
     scheduleWatchdog(evt, true)
 }
 
-// Event on a monitored device - ignore the frequency and just go ahead and poll, since pollChildren will throttle if nothing has changed.
+// Event on a monitored device
 def userDefinedEvent(evt) {
-	LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 4, null, "info")
-    atomicState.lastUserDefinedEventDate = getTimestamp()
-    atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})" 
-    
-    if ( ((now() - atomicState.lastUserDefinedEvent) / 1000.0 / 60.0) < 0.5 ) { 
-    	LOG("userDefinedEvent() - time since last event is less than 30 seconds. Exiting without polling.", 4)
+    if ( ((now() - atomicState.lastUserDefinedEvent) / 60000.0) < 0.5 ) { 
+    	LOG("userDefinedEvent() - time since last event is less than 30 seconds, ignoring.", 4)
     	return 
- 	} 
+ 	}
+    
+    LOG("userDefinedEvent() - with evt (Device:${evt?.displayName} ${evt?.name}:${evt?.value})", 4, null, "info")
+    
 	poll()
     atomicState.lastUserDefinedEvent = now()
     atomicState.lastUserDefinedEventDate = getTimestamp()
+    atomicState.lastUserDefinedEventInfo = "Event Info: (Device:${evt?.displayName} ${evt?.name}:${evt?.value})"
     
-	if ( ((now() - atomicState.lastUserDefinedEvent) / 60000) < 3 ) { 
+	if ( ((now() - atomicState.lastUserDefinedEvent) / 60000) < 3 ) {
+    	// Don't bother running the watchdog on EVERY userDefinedEvent - that's really overkill.
     	LOG("userDefinedEvent() - polled, but time since last event is less than 3 minutes. Exiting without performing additional actions.", 4)
     	return 
  	}    
@@ -1039,8 +1041,8 @@ def scheduleWatchdog(evt=null, local=false) {
 			LOG("scheduleWatchdog() - Unable to schedule handlers do to loss of API Connection. Please ensure you are authorized.", 1, null, "error")
 			return false
 		}
-	} else if (expiry <= (((pollingInterval < 6) ? 6 : (pollingInterval + 1)) * 60000)) {		// We know we are called at the end of every scheduled poll
-    	LOG("scheduleWatchdog() - refreshing Token, ${String.format('%.2f',(expiry/60000))} minutes to expiry",3,"",'info')
+	} else if (expiry <= ((pollingInterval + 2) * 60000)) {  	// We know we are called at the beginning of every scheduled poll (before calling the Ecobee API)
+    	LOG("scheduleWatchdog() - refreshing Token, ${String.format('%.2f',(expiry/60000))} minutes to expiry", 2, null, 'info')
        	refreshAuthToken()
     }
 
@@ -1057,7 +1059,7 @@ def scheduleWatchdog(evt=null, local=false) {
 private def Boolean isDaemonAlive(daemon="all") {
 	// Daemon options: "poll", "auth", "watchdog", "all"    
     def daemonList = ["poll", "auth", "watchdog", "all"]
-	Integer pollingInterval = getPollingInterval().toInteger()
+	Integer pollingInterval = getPollingInterval()
 
 	daemon = daemon.toLowerCase()
     def result = true    
@@ -1101,7 +1103,7 @@ private def Boolean spawnDaemon(daemon="all", unsched=true) {
     def daemonList = ["poll", "auth", "watchdog", "all"]
 	Random rand = new Random()
 	
-	Integer pollingInterval = getPollingInterval().toInteger()
+	Integer pollingInterval = getPollingInterval()
     
     daemon = daemon.toLowerCase()
     def result = true
@@ -1227,7 +1229,7 @@ def pollChildren(child = null) {
     
     if (forcePoll || somethingChanged) {
     	// It has been longer than the minimum delay OR some thermostat data has changed OR we are doing a forced poll
-        LOG("pollChildren() - Requesting changes for ${thermostatsToPoll}${forcePoll?' (forced)':''}", 2, child, 'info')
+        LOG("pollChildren() - Requesting changes for ${thermostatsToPoll}${forcePoll?' (forced)':''}", 3, child, 'info')
     	pollEcobeeAPI(thermostatsToPoll)  // This will update the values saved in the state which can then be used to send the updates
 	} else {
         LOG("pollChildren() - Nothing has changed.", 2, child, 'info')
@@ -1263,7 +1265,7 @@ def pollChildren(child = null) {
 // 		 If the UI needs updating, the refresh now does a forcePoll on the entire device.
 private def generateEventLocalParams() {
 	// Iterate over all the children
-    LOG("generateEventLocalParams() - updating API status", 2, "", 'info')
+    LOG("generateEventLocalParams() - updating API status", 3, null, 'info')
 	def d = getChildDevices()
     d?.each() { oneChild ->
     	LOG("generateEventLocalParams() - Processing data for child: ${oneChild} has ${oneChild.capabilities}", 4, "", 'info')
@@ -1457,7 +1459,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 			query: [format: 'json', body: jsonRequestBody]
 	]
 
-	def sNames = []
+	def tidList = []
 	try{
 		httpGet(pollParams) { resp ->
 			if(resp.status == 200) {
@@ -1481,6 +1483,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                 resp.data.thermostatList.each { stat ->
                 
 					String tid = stat.identifier.toString()
+                    tidList += [tid]
                     LOG("pollEcobeeAPI() - Parsing data for thermostat ${tid}", 3, null, 'info')
 					tempEquipStat[tid] = stat.equipmentStatus // always store ("" is a valid return value)
                     
@@ -1536,7 +1539,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 				}
                 
                 updateLastPoll()
-                LOG("pollEcobeeAPI() - Parsing complete",3,null,'info')
+                LOG("pollEcobeeAPI() - Parsing complete", 3, null, 'info')
                 // Update the data and send it down to the devices as events
 				if (forcePoll || runtimeUpdated) updateSensorData()	// only update if we got updates
                 													// TODO: need to figure out how to update only the sensors on thermostats that were updated
@@ -1554,12 +1557,11 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                     generateEventLocalParams() // Update the connection status
                 }
                 def tNames = resp.data.thermostatList?.name.toString()
-                def numStats = atomicState.thermostats?.size()
-                if (debugLevel(3)) {
-					LOG("pollEcobeeAPI() - Updated ${numStats} thermostat${(numStats>1)?'s':''}: ${tNames}", 2, null, 'info')
-                    
+                def numStats = tidList?.size()
+                if (debugLevel(2)) {
+					LOG("pollEcobeeAPI() - Updated ${numStats} thermostat${(numStats>1)?'s':''}: ${tidList}", 2, null, 'info')
                 } else {
-                	LOG("pollEcobeeAPI() - Updated ${numStats} thermostat${(numStats>1)?'s':''}: ${tNames} ${atomicState.thermostats}", 2, null, 'info')
+                	LOG("pollEcobeeAPI() - Updated ${numStats} thermostat${(numStats>1)?'s':''}: ${tNames}/${tidList} ${atomicState.thermostats}", 4, null, 'info')
 				}
 			} else {
 				LOG("pollEcobeeAPI() - polling children & got http status ${resp.status}", 1, null, "error")
@@ -1631,6 +1633,7 @@ def updateSensorData() {
 	LOG("Entered updateSensorData() ${atomicState.remoteSensors}", 5)
  	def sensorCollector = [:]
     def sNames = []
+    Integer precision = getTempDecimals()
     atomicState.thermostatData.thermostatList.each { singleStat ->
     	def tid = singleStat.identifier
     
@@ -1658,7 +1661,7 @@ def updateSensorData() {
                    		LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
                        	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
 							temperature = cap.value as Double
-							temperature = (temperature / 10).toDouble().round(settings.tempDecimals.toInteger()) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
+							temperature = (temperature / 10).toDouble().round(precision) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
                        	} else if (cap.value == "unknown") {
                        		// TODO: Do something here to mark the sensor as offline?
                            	LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
@@ -1680,9 +1683,9 @@ def updateSensorData() {
 					}
 				}
                                             				
-				def sensorData = [ decimalPrecision: tempDecimals ]
+				def sensorData = [ decimalPrecision: precision ]
 				sensorData << [
-					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", tempDecimals.toInteger()))					
+					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", precision))					
                 ]
                	if (occupancy != "") {
                		sensorData << [ motion: occupancy ]
@@ -1693,11 +1696,11 @@ def updateSensorData() {
 		} // End [tid] sensors loop
 	} // End thermostats loop
 	atomicState.remoteSensorsData = sensorCollector
-    if (debugLevel(3)) {
-        LOG("updateSensorData(): Event data updated for ${sNames.size()} sensors ${sNames}",3, null, 'info')
+    if (debugLevel(2)) {
+        LOG("updateSensorData() - Event data updated for ${sNames.size()} sensors ${sNames}",2, null, 'info')
 		// LOG("updateSensorData(): Sensor updates completed",3, null, 'info')
     } else {
-		LOG("updateSensorData(): Updated these remoteSensors: ${sensorCollector}", 4, null, 'trace') 
+		LOG("updateSensorData() - Updated these remoteSensors: ${sensorCollector}", 4, null, 'trace') 
     }
 }
 
@@ -1708,17 +1711,19 @@ def updateThermostatData() {
 	boolean usingMetric = wantMetric() // cache the value to save the function calls
 	def forcePoll = atomicState.forcePoll
     Integer apiPrecision = usingMetric ? 2 : 1					// highest precision available from the API
-    Integer userPrecision = settings.tempDecimals.toInteger()	// user's requested display precision
+    Integer userPrecision = getTempDecimals()						// user's requested display precision
+    def tstatNames = []
 
 	atomicState.thermostats = atomicState.thermostatData.thermostatList.inject([:]) { collector, stat ->
 		def dni = [ app.id, stat.identifier ].join('.')
         def tstatName = atomicState.thermostatsWithNames[dni]
+        tstatNames += [tstatName]
         
 		// we use atomicState.thermostatData because it holds the latest Ecobee API response, from which we can determine which stats actually
         // had updated data. Thus the following work is done ONLY for tstats that have updated data
 		def tid = stat.identifier
 
-		LOG("updateThermostatData() - Updating event data for thermostat ${tstatName} (${tid})", 2, null, 'info')
+		LOG("updateThermostatData() - Updating event data for thermostat ${tstatName} (${tid})", 3, null, 'info')
 
 	// grab a local copy from the atomic storage all at once (avoid repetive reads from backing store)
     	def es = atomicState.equipmentStatus
@@ -1768,7 +1773,7 @@ def updateThermostatData() {
             // 		 can operate efficiently. So, while the user can specify a display precision of 0, 1 or 2 decimal digits, we ALWAYS keep and send max decimal digits and let the device handler adjust for display
             //		 For Fahrenheit, we keep the 1 decimal digit the API provides, for Celsius we allow for 2 decimal digits as a result of the mathematical calculation
             
-			tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature.toDouble() / 10.0), "F", apiPrecision /*settings.tempDecimals.toInteger()*/)
+			tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature.toDouble() / 10.0), "F", apiPrecision)
             Double tempHeatAt = runtime.desiredHeat.toDouble()
             Double tempCoolAt = runtime.desiredCool.toDouble()
             if (equipStatus == 'idle') {											// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
@@ -1909,7 +1914,7 @@ def updateThermostatData() {
         		currentClimateName = scheduledClimateName
 				currentClimate = scheduledClimateName
 			} else {
-        		LOG("updateThermostatData() - No climateRef or running Event was found", 1, null, "info")
+        		LOG("updateThermostatData() - No climateRef or running Event was found", 4, null, "info")
             	currentClimateName = ""
         		currentClimateId = ""        	
         	}
@@ -2011,13 +2016,13 @@ def updateThermostatData() {
         }
         
         // SmartApp configuration settings that almost never change (Listed in order of frequency that they should change normally)
-        def configList = [atomicState.timeOfDay,settings.tempDecimals,settings.debugLevel,getTemperatureScale()]
+        def configList = [atomicState.timeOfDay,userPrecision,getDebugLevel(),getTemperatureScale()]
         if (forcePoll || (changeConfig == [:]) || !changeConfig[tid] || (changeConfig[tid] != configList)) { 
             data += [
         		timeOfDay: atomicState.timeOfDay,
-           		decimalPrecision: settings.tempDecimals,
+           		decimalPrecision: userPrecision,
 				temperatureScale: getTemperatureScale(),			
-				debugLevel: settings.debugLevel.toInteger(),
+				debugLevel: getDebugLevel(),
         	]
             changeConfig[tid] = configList
             atomicState.changeConfig = changeConfig
@@ -2102,7 +2107,7 @@ def updateThermostatData() {
             ]
             
             // the rest of runtime object changes often, but not every time runtime is updated
-            def oftenList = [motion,tempHeatingSetpoint,tempCoolingSetpoint,thermostatFanMode,humiditySetpoint,settings.tempDecimals] // also send if decimal precision changes
+            def oftenList = [motion,tempHeatingSetpoint,tempCoolingSetpoint,thermostatFanMode,humiditySetpoint,userPrecision] // also send if decimal precision changes
             if (forcePoll || (changeOften == [:]) || !changeOften[tid] || (changeOften[tid] != oftenList)) { 
             	data += [
 					heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint.toDouble().round(userPrecision)), // The other temps we'll adjust here
@@ -2129,17 +2134,14 @@ def updateThermostatData() {
                 ]
             }
 		}
-        
-        if (debugLevel(3)) {
-			LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid})", 2, null, 'info')
-        } else {
-        	LOG("pollEcobeeAPI() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
-        }
+        LOG("updateThermostatData() - Event data updated for thermostat ${tstatName} (${tid}) = ${data}", 4, null, 'trace')
 
 		collector[dni] = [thermostatId:tid, data:data]
 		// i++
 		return collector
-	}			
+	}
+    def nSize = tstatNames.size()
+    LOG("updateThermostatData() - Event data updated for ${nSize} thermostat${nSize>1?'s':''} ${tstatNames}", 2, null, 'info')
 }
 
 def getChildThermostatDeviceIdsString(singleStat = null) {
@@ -2476,7 +2478,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
     def h = child.device.currentValue("heatingSetpoint")
     def c = child.device.currentValue("coolingSetpoint")
     
-    def holdType = sendHoldType ?: whatHoldType()
+    def theHoldType = sendHoldType ? sendHoldType : whatHoldType()
     
     // Per this thread: http://developer.ecobee.com/api/topics/qureies-related-to-setfan
     // def extraParams = [isTemperatureRelative: "false", isTemperatureAbsolute: "false"]
@@ -2493,7 +2495,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
         atomicState.offFanModeOn = false
         
         thermostatSettings = ',"thermostat":{"settings":{"fanMinOnTime":15}}'
-        thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '","holdType":"' + holdType + '","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
+        thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '","holdType":"' + theHoldType + '","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
     } else if (fanMode == "off") {
     	// How to turn off the fan http://developer.ecobee.com/api/topics/how-to-turn-fan-off
         // NOTE: Once you turn it off it does not automatically come back on if you select resume program
@@ -2508,7 +2510,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
 		atomicState.circulateFanModeOn = false    
         atomicState.offFanModeOn = false
         thermostatSettings = ''
-        thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '","holdType":"' + holdType + '","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
+        thermostatFunctions = '{"type":"setHold","params":{"coolHoldTemp":"' + c + '","heatHoldTemp":"' + h + '","holdType":"' + theHoldType + '","fan":"'+fanMode+'","isTemperatureAbsolute":false,"isTemperatureRelative":false}}'
     }    
 	
     // {"selection":{"selectionType":"thermostats","selectionMatch":"312989153500"},"functions":[{"type":"setHold","params":{"coolHoldTemp":"73","heatHoldTemp":"66","holdType":"nextTransition","fan":"circulate","isTemperatureAbsolute":false,"isTemperatureRelative":false}}],"thermostat":{"settings":{"fanMinOnTime":15}}}
@@ -2769,16 +2771,27 @@ private def fToC(temp) {
     // return fahrenheitToCelsius(temp)
 }
 
-
 // Establish the minimum amount of time to wait to do another poll
 private def  getMinMinBtwPolls() {
     // TODO: Make this configurable in the SmartApp
 	return 1
 }
 
+// need these next 4 get routines because settings variable defaults aren't set unless the "Preferences" page is actually opened/rendered
 private Integer getPollingInterval() {
-	// return (settings.pollingInterval?.toInteger() >= 5) ? settings.pollingInterval.toInteger() : 5
-    return ((settings.pollingInterval && settings.pollingInterval.isNumber()) ? settings.pollingInterval.toInteger() : 5)
+    return (settings.pollingInterval?.isNumber() ? settings.pollingInterval.toInteger() : 5)
+}
+
+private Integer getTempDecimals() {
+	return ( settings.tempDecimals?.isNumber() ? settings.tempDecimals.toInteger() : (wantMetric() ? 1 : 0))
+}
+
+private Integer getDebugLevel() {
+	return ( settings.debugLevel?.isNumber() ? settings.debugLevel.toInteger() : 3)
+}
+
+private String getHoldType() {
+	return ( settings.holdType ? settings.holdType : 'Until I Change')
 }
 
 private def String getTimestamp() {
@@ -2925,7 +2938,7 @@ private debugLevel(level=3) {
     	return false 
 	}
     
-	def debugLvlNum = settings.debugLevel?.isNumber() ? settings.debugLevel.toInteger() : 3
+	def debugLvlNum = getDebugLevel()
     def wantedLvl = level?.toInteger()    
     // log.trace("debugLvlNum = ${debugLvlNum}; wantedLvl = ${wantedLvl}")
 	return ( debugLvlNum >= wantedLvl )
