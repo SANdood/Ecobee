@@ -37,11 +37,11 @@
  *	0.10.8 - Added programsList attribute - list of available "climates" on this thermostat
  *  0.10.9 - Fixed double FtoC conversions
  *	0.10.10- holdEndsAt suppression
- *	0.10.11- Misc notification cleanup 
+ *	0.10.11- Misc notification cleanup (& removed the extra I)
  *
  */
 
-def getVersionNum() { return "0.10.11" }
+def getVersionNum() { return "0.10.11a" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -653,7 +653,7 @@ def generateEvent(Map results) {
 				
 				case 'weatherSymbol':
 					// Check to see if it is night time, if so change to a night symbol
-I					def symbolNum = value.toInteger()
+					def symbolNum = value.toInteger()
 					if (device.currentValue('timeOfDay') == 'night') {
 						symbolNum = value.toInteger() + 100
 						isChange = isStateChange(device, name, symbolNum.toString())
