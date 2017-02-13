@@ -37,11 +37,12 @@
  *	0.10.8 - Added programsList attribute - list of available "climates" on this thermostat
  *  0.10.9 - Fixed double FtoC conversions
  *	0.10.10- holdEndsAt suppression
- *	0.10.11- Misc notification cleanup (& removed the extra I)
+ *	0.10.11- Misc notification cleanup
+ *	0.10.12- Fixed humiditySetpoint reporting
  *
  */
 
-def getVersionNum() { return "0.10.11a" }
+def getVersionNum() { return "0.10.12" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -640,7 +641,7 @@ def generateEvent(Map results) {
 				
 				case 'humiditySetpoint':
 					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Humidity setpoint is ${value}%", isStateChange: true, displayed: false]
-		            sendEvent( name: name, linkText: linkText, handlerName: name, descriptionText: "Humidity is ${device.currentValue('humidity')}% (setpoint: ${value}%)", isStateChange: true, displayed: true )
+		            sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${device.currentValue('humidity')}% (setpoint: ${value}%)", isStateChange: false, displayed: true )
                     break;
 				
 				case 'currentProgramName':
