@@ -56,10 +56,11 @@
  *	0.10.19- Revamped watchdog's refreshAuthToken strategy
  *	0.10.21- Yet another attempt to fixed initialization errors on first install
  *	0.10.22- Gotcha, dagnabbit! settings.vars weren't being initialized if Preferences page never opened
+ *	0.10.23- Fixed humiditySetpoint (verify valid extendedRuntime data)
  *
  *
  */  
-def getVersionNum() { return "0.10.22" }
+def getVersionNum() { return "0.10.23" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1930,9 +1931,9 @@ def updateThermostatData() {
 		// HUMIDITY
 		def humiditySetpoint = 0
         def humidity = runtime.desiredHumidity
-        if (extendedRuntime?.desiredHumidity) humidity = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
+        if (extendedRuntime && extendedRuntime.desiredHumidity && extendedRuntime.desiredHumidity[2]) humidity = extendedRuntime.desiredHumidity[2]		// if supplied, extendedRuntime gives the actual target (Frost Control)
         def dehumidity = runtime.desiredDehumidity
-        if (extendedRuntime?.desiredDehumidity) dehumidity = extendedRuntime.desiredDehumidity[2]	
+        if (extendedRuntime && extendedRuntime.desiredDehumidity && extendedRuntime.desiredDehumidity[2]) dehumidity = extendedRuntime.desiredDehumidity[2]	
         def hasHumidifier = statSettings.hasHumidifier
         def hasDehumidifier = statSettings.hasDehumidifier || statSettings.dehumidifyWithAC // we can hide the details from the device handler
 		
