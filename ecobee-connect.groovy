@@ -57,11 +57,12 @@
  *	0.10.21- Yet another attempt to fixed initialization errors on first install
  *	0.10.22- Gotcha, dagnabbit! settings.vars weren't being initialized if Preferences page never opened
  *	0.10.23- Fixed humiditySetpoint (verify valid extendedRuntime data)
- *	0.10.24- Don't adjust Heating/Cooling at during 'fan only'
+ *	0.10.24- Don't adjust Heating/Cooling setpoints during 'fan only'
+ *	0.10.25- Optimized updates for setpoints and programs
  *
  *
  */  
-def getVersionNum() { return "0.10.24" }
+def getVersionNum() { return "0.10.25" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -2081,7 +2082,7 @@ def updateThermostatData() {
         	}
             
             // Thermostat operational things that rarely change, (a few times a day at most)
-         	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,currentClimateName,scheduledClimateName]
+         	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,currentClimateName,currentClimateId,scheduledClimateName,scheduledClimateId]
             if (forcePoll || (changeRarely == [:]) || !changeRarely[tid] || (changeRarely[tid] != rarelyList)) { 
             	data += [
           			thermostatHold: thermostatHold,
@@ -2102,16 +2103,17 @@ def updateThermostatData() {
         
         // Runtime stuff that changes more frequently
 		if (forcePoll || atomicState.runtimeUpdated) {
-        	// Send both Temp and Humidity whenever we get runtime changes
-			data += [            
-				temperature: String.format("%.${apiPrecision}f", tempTemperature.toDouble().round(apiPrecision)), 			// ALWAYS send full apiPrecision - let device tile truncate/adjust
-                humidity: runtime.actualHumidity,
+        	// Send the temperature whenever we get runtime changes
+			data += [ 
+            	// ALWAYS send Temperature in full apiPrecision - let device tile truncate/adjust
+				temperature: String.format("%.${apiPrecision}f", tempTemperature.toDouble().round(apiPrecision)), 	
             ]
             
             // the rest of runtime object changes often, but not every time runtime is updated
-            def oftenList = [motion,tempHeatingSetpoint,tempCoolingSetpoint,thermostatFanMode,humiditySetpoint,userPrecision] // also send if decimal precision changes
+            def oftenList = [occupancy,runtime.actualHumidity,humiditySetpoint,tempHeatingSetpoint,tempCoolingSetpoint,currentFanMode,userPrecision] // also send if decimal precision changes
             if (forcePoll || (changeOften == [:]) || !changeOften[tid] || (changeOften[tid] != oftenList)) { 
             	data += [
+                    humidity: runtime.actualHumidity,
 					heatingSetpoint: String.format("%.${userPrecision}f", tempHeatingSetpoint.toDouble().round(userPrecision)), // The other temps we'll adjust here
 					coolingSetpoint: String.format("%.${userPrecision}f", tempCoolingSetpoint.toDouble().round(userPrecision)), 
 					thermostatFanMode: currentFanMode,
@@ -2122,7 +2124,7 @@ def updateThermostatData() {
             	atomicState.changeOften = changeOften
         	}
             
-            // Weather only changes every 15 minutes, so NBD - send it every time we get it
+            // Weather only changes every 15 minutes, so NBD - send it every time we get it, even if it hasn't changed
         	if (atomicState.getWeather) {				
         		def wSymbol = ""
             	def wTemp = ""
