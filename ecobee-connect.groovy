@@ -57,10 +57,11 @@
  *	0.10.21- Yet another attempt to fixed initialization errors on first install
  *	0.10.22- Gotcha, dagnabbit! settings.vars weren't being initialized if Preferences page never opened
  *	0.10.23- Fixed humiditySetpoint (verify valid extendedRuntime data)
+ *	0.10.24- Don't adjust Heating/Cooling at during 'fan only'
  *
  *
  */  
-def getVersionNum() { return "0.10.23" }
+def getVersionNum() { return "0.10.24" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1777,7 +1778,7 @@ def updateThermostatData() {
 			tempTemperature = myConvertTemperatureIfNeeded( (runtime.actualTemperature.toDouble() / 10.0), "F", apiPrecision)
             Double tempHeatAt = runtime.desiredHeat.toDouble()
             Double tempCoolAt = runtime.desiredCool.toDouble()
-            if (equipStatus == 'idle') {											// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
+            if ((equipStatus == 'idle') || (equipStatus == 'fan')) {	// Show trigger point if idle; tile shows "Heating at 69.5" vs. "Heating to 70.0"
             	tempHeatAt = tempHeatAt - statSettings.stage1HeatingDifferentialTemp.toDouble()
                 tempCoolAt = tempCoolAt + statSettings.stage1CoolingDifferentialTemp.toDouble()
             }
@@ -1954,25 +1955,25 @@ def updateThermostatData() {
 		// EQUIPMENT STATUS
 		def heatStages = statSettings.heatStages
 		def coolStages = statSettings.coolStages 
-		def equipOpStat
-        def thermOpStat
+		def equipOpStat = 'idle'	// assume we're idle - this gets fixed below if different
+        def thermOpStat = 'idle'
             
         if (forcePoll || (equipStatus != lastEquipStatus)) {
-			if (equipStatus == 'idle') {
+			/*if (equipStatus == 'idle') {
 				equipOpStat = equipStatus
             	thermOpStat = equipStatus
-			} else if (equipStatus == 'fan') {
+			} else */ if (equipStatus == 'fan') {
 				equipOpStat = 'fan only'
             	thermOpStat = equipOpStat
 			} else if (equipStatus.contains('eat')) {					// heating
         		thermOpStat = 'heating'
-				if 		(equipStatus.contains('eat1')) { equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages > 1) ? 'heat 1' : 'heating' }
-				else if (equipStatus.contains('eat2')) { equipOpStat = 'heat 2' }
-				else if (equipStatus.contains('eat3')) { equipOpStat = 'heat 3' }
-				else if (equipStatus.contains('ump2')) { equipOpStat = 'heat pump 2' }
-				else if (equipStatus.contains('ump3')) { equipOpStat = 'heat pump 3' }
-				else if (equipStatus.contains('ump')) { equipOpStat = 'heat pump' }
-				if (equipStatus.contains('humid')) { equipOpStat += ' hum' }	// humidifying if heat
+				if 		(equipStatus.contains('eat1')) 	{ equipOpStat = (auxHeatMode) ? 'emergency' : (heatStages > 1) ? 'heat 1' : 'heating' }
+				else if (equipStatus.contains('eat2')) 	{ equipOpStat = 'heat 2' }
+				else if (equipStatus.contains('eat3')) 	{ equipOpStat = 'heat 3' }
+				else if (equipStatus.contains('ump2')) 	{ equipOpStat = 'heat pump 2' }
+				else if (equipStatus.contains('ump3')) 	{ equipOpStat = 'heat pump 3' }
+				else if (equipStatus.contains('ump')) 	{ equipOpStat = 'heat pump' }
+				if (equipStatus.contains('humid')) 		{ equipOpStat += ' hum' }	// humidifying if heat
 			} else if (equipStatus.contains('ool')) {				// cooling
         		thermOpStat = 'cooling'
 				if 		(equipStatus.contains('ool1')) { equipOpStat = (coolStages == 1) ? 'cooling' : 'cool 1' }
