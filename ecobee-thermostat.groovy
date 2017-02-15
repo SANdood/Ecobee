@@ -40,11 +40,12 @@
  *	0.10.11- Misc notification cleanup
  *	0.10.12- Fixed humiditySetpoint reporting
  *	0.10.13- More sendEvent message cleanup; hide all the locally generated events from the notification queue
- *  0.10.14- Fixed Motion message
+ *	0.10.14- Fixed 'motion' message
+ *	0.10.15- Fixed resumeProgram tile status
  *
  */
 
-def getVersionNum() { return "0.10.14" }
+def getVersionNum() { return "0.10.15" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -648,7 +649,7 @@ def generateEvent(Map results) {
                     break;
 				
 				case 'currentProgramName':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Program is ${value}", isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: "${value}", descriptionText: 'Program is '+(value as String), isStateChange: true, displayed: true]
 					break;
 				
 				case 'apiConnected':
@@ -922,13 +923,14 @@ void setCoolingSetpoint(Double setpoint) {
 }
 
 void resumeProgram(resumeAll=true) {
-	// TODO: Put a check in place to see if we are already running the program. If there is nothing to resume, then save the calls upstream
 	def thermostatHold = device.currentValue("thermostatHold")
 	if (thermostatHold == "") {
 		LOG("resumeProgram() but no current hold", 3)
+        sendEvent(name: "resumeProgram", value: "resume", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 		return
 	} else if (thermostatHold == "vacation") {
 		LOG("resumeProgram() - cannot resume from ${thermostatHold} hold", 3, null, "error")
+        sendEvent(name: "resumeProgram", value: "resume", descriptionText: "resumeProgram is done", displayed: false, isStateChange: true)
 		return
 	} else {
 		LOG("resumeProgram() is called, hold type is ${thermostatHold}", 4)
@@ -1049,10 +1051,10 @@ void setThermostatProgram(program, holdType=null) {
 	}
   
     if ( parent.setProgram(this, program, deviceId, sendHoldType) ) {
-    	log.debug "Success setting program to ${program}!"
+    	log.debug "Success setting program to ${program}"
 		generateProgramEvent(program)
 	} else {
-    	LOG("Error setting new comfort setting ${program}.", 2, this, "warn")
+    	LOG("Error setting new comfort setting ${program}", 2, this, "warn")
 		def priorProgram = device.currentState("currentProgramId")?.value
 		generateProgramEvent(priorProgram, program) // reset the tile back
 	}
@@ -1103,8 +1105,11 @@ def generateProgramEvent(program, failedProgram=null) {
 	LOG("Generate generateProgramEvent Event: program ${program}", 4)
 
 	sendEvent(name: "thermostatStatus", value: "Setpoint updating...", /* description: statusText, */ displayed: false)
-	sendEvent(name: "currentProgramName", value: "Hold: "+program.capitalize(), displayed: false)
-    sendEvent(name: "currentProgramId", value: program, displayed: false)
+
+	String prog = program.capitalize()
+    String progHold = failedProgram ? prog : "Hold: "+prog
+    def updates = ['currentProgramName':progHold,'currentProgramId':program.toLowerCase(),'currentProgram': prog]
+    generateEvent(updates)
     
     def tileName = ""
     
@@ -1204,9 +1209,11 @@ def generateSetpointEvent() {
     def heatingSetpoint = device.currentValue("heatingSetpoint")
 	def coolingSetpoint = device.currentValue("coolingSetpoint")
     
-	LOG("Current Mode = ${mode}", 4, null, "debug")
-	LOG("Heating Setpoint = ${heatingSetpoint}", 4, null, "debug")
-	LOG("Cooling Setpoint = ${coolingSetpoint}", 4, null, "debug")
+    if (debugLevel(4)) {
+		LOG("Current Mode = ${mode}", 4, null, "debug")
+		LOG("Heating Setpoint = ${heatingSetpoint}", 4, null, "debug")
+		LOG("Cooling Setpoint = ${coolingSetpoint}", 4, null, "debug")
+    }
 
 	switch (mode) {
 		case 'heat':
@@ -1440,12 +1447,14 @@ def generateStatusEvent() {
     def operatingState = device.currentValue("thermostatOperatingState")
 
 	def statusText	
-	LOG("Generate Status Event for Mode = ${mode}", 4)
-	LOG("Temperature = ${temperature}", 4)
-	LOG("Heating setpoint = ${heatingSetpoint}", 4)
-	LOG("Cooling setpoint = ${coolingSetpoint}", 4)
-	LOG("HVAC Mode = ${mode}", 4)	
-    LOG("Operating State = ${operatingState}", 4)
+    if (debugLevel(4)) {
+		LOG("Generate Status Event for Mode = ${mode}", 4)
+		LOG("Temperature = ${temperature}", 4)
+		LOG("Heating setpoint = ${heatingSetpoint}", 4)
+		LOG("Cooling setpoint = ${coolingSetpoint}", 4)
+		LOG("HVAC Mode = ${mode}", 4)	
+    	LOG("Operating State = ${operatingState}", 4)
+    }
 
 	if (mode == "heat") {
 //		if (temperature >= heatingSetpoint) {
@@ -1549,25 +1558,23 @@ private def whatHoldType() {
 
 private debugLevel(level=3) {
 	def debugLvlNum
-    if (device.currentValue("debugLevel")) {
-		debugLvlNum = device.currentValue("debugLevel").toInteger() ?: parent.settings.debugLevel?.toInteger() ?: 3
-    } else {
-    	debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
-    }
+	def dbg = device.currentValue('debugLevel')
+    //if (device.currentValue("debugLevel")) {
+	debugLvlNum = (dbg && dbg.isNumber()) ? dbg.toInteger() : parent.settings.debugLevel?.toInteger() ?: 3
+    //} else {
+    //	debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
+    //}
     def wantedLvl = level?.toInteger()
     
     return ( debugLvlNum >= wantedLvl )
 }
 
 private def LOG(message, level=3, child=null, logType="debug", event=false, displayEvent=false) {
-	def prefix = ""
-	if ( parent.settings.debugLevel?.toInteger() == 5 ) { prefix = "LOG: " }
-	if ( debugLevel(level) ) { 
+	def prefix = debugLevel(5) ? 'LOG: ' : ''
+	if (debugLevel(level)) { 
     	log."${logType}" "${prefix}${message}"
-        // log.debug message
         if (event) { debugEvent(message, displayEvent) }        
 	}  
-    if (level < 4) log.info message
 }
 
 private def debugEvent(message, displayEvent = false) {
