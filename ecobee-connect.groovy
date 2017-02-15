@@ -66,7 +66,7 @@
  *
  *
  */  
-def getVersionNum() { return "0.10.26" }
+def getVersionNum() { return "0.10.26a" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1316,76 +1316,75 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 	String tstatsStr = ""
     int j=0        
 	
-//	while ((statusCode != 0) && (j++ <1)) { // retries once if api call fails
-		try {
-			httpGet(pollParams) { resp ->
-				if(resp.status == 200) {
-					LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4)
-					statusCode = resp.data.status.code
-					if (statusCode == 0) { 
-                    	def revisions = resp.data.revisionList
-						def thermostatUpdated = false
-						def runtimeUpdated = false
-                        tstatsStr = ""
-						result = true
-						if (atomicState.lastRevisions == "foo") { // haven't finished (re)initializing yet
-                            thermostatUpdated = true
-                            runtimeUpdated = true
-                            tstatsStr = thermostatIdsString 
-                        } else {
-							result = false
-							for (i in 0..resp.data.thermostatCount - 1) {
-						    	def lastDetails = atomicState.lastRevisions[i].split(':')
-						    	def latestDetails = revisions[i].split(':')
-                            	def tru = false
-                                def ttu = false
-								if (lastDetails[0] == latestDetails[0]) {	// verify these are the same thermostat
-									if (lastDetails[5] != latestDetails[5]) tru = true 
-									if (lastDetails[3] != latestDetails[3]) ttu = true 
-                                } else {
-                                    tru = true // IDs didn't match, so assume everything changed for this thermostat
-                                    ttu = true
-                                }
-                                if (tru || ttu) {
-                                	runtimeUpdated = (runtimeUpdated || tru)
-                                    thermostatUpdated = (thermostatUpdated || ttu)
-                                    result = true
-                                    tstatsStr = (tstatsStr=="") ? "${latestDetails[0]}" : (tstatsStr.contains("${latestDetails[0]}")) ? tstatsStr : tstatsStr + ",${latestDetails[0]}"
-                                }
-							}
+	try {
+		httpGet(pollParams) { resp ->
+			if(resp.status == 200) {
+				LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4)
+				statusCode = resp.data.status.code
+				if (statusCode == 0) { 
+                    def revisions = resp.data.revisionList
+					def thermostatUpdated = false
+					def runtimeUpdated = false
+                    tstatsStr = ""
+					result = true
+					if (atomicState.lastRevisions == "foo") { // haven't finished (re)initializing yet
+                        thermostatUpdated = true
+                        runtimeUpdated = true
+                        tstatsStr = thermostatIdsString 
+                    } else {
+						result = false
+						for (i in 0..resp.data.thermostatCount - 1) {
+						    def lastDetails = atomicState.lastRevisions[i].split(':')
+						    def latestDetails = revisions[i].split(':')
+                            def tru = false
+                            def ttu = false
+							if (lastDetails[0] == latestDetails[0]) {	// verify these are the same thermostat
+								if (lastDetails[5] != latestDetails[5]) tru = true 
+								if (lastDetails[3] != latestDetails[3]) ttu = true 
+                            } else {
+                                tru = true // IDs didn't match, so assume everything changed for this thermostat
+                                ttu = true
+                            }
+                            if (tru || ttu) {
+                                runtimeUpdated = (runtimeUpdated || tru)
+                                thermostatUpdated = (thermostatUpdated || ttu)
+                                result = true
+                                tstatsStr = (tstatsStr=="") ? "${latestDetails[0]}" : (tstatsStr.contains("${latestDetails[0]}")) ? tstatsStr : tstatsStr + ",${latestDetails[0]}"
+                            }
 						}
-						atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
-                        atomicState.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
-						atomicState.runtimeUpdated = runtimeUpdated		// Revised: runtime, equip status, remote sensors, weather?
-                        atomicState.changedThermostatIds = tstatsStr    // only these thermostats need to be requested in pollEcobeeAPI
 					}
-                    // if we get here, we had http status== 200, but API status != 0
-				} else {
-					LOG("checkThermostatSummary() - polling got http status ${resp.status}", 1, null, "error")
+					atomicState.latestRevisions = revisions			// let pollEcobeeAPI update last with latest after it finishes the poll
+                    atomicState.thermostatUpdated = thermostatUpdated	// Revised: settings, program, event, device
+					atomicState.runtimeUpdated = runtimeUpdated		// Revised: runtime, equip status, remote sensors, weather?
+                    atomicState.changedThermostatIds = tstatsStr    // only these thermostats need to be requested in pollEcobeeAPI
 				}
+                // if we get here, we had http status== 200, but API status != 0
+			} else {
+				LOG("checkThermostatSummary() - polling got http status ${resp.status}", 1, null, "error")
 			}
-		} catch (groovyx.net.http.HttpResponseException e) {   
-        	result = false // this thread failed to get the summary
-            if ((e.statusCode == 500) && (e.response.data.status.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
-            	LOG("checkThermostatSummary() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
-               	atomicState.action = "pollChildren"
-            	LOG( "Refreshing your auth_token!", 4)
-            	if ( refreshAuthToken() ) {
-                	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
-                	LOG( "checkThermostatSummary() - Auth_token refreshed", 2, null, 'info')
-                } else {
-                	LOG( "checkThermostatSummary() - Auth_token refresh failed", 1, null, 'error')
-                }
+		}
+	} catch (groovyx.net.http.HttpResponseException e) {   
+        result = false // this thread failed to get the summary
+        if ((e.statusCode == 500) && (e.response.data.status.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
+            LOG("checkThermostatSummary() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+            atomicState.action = "pollChildren"
+            LOG( "Refreshing your auth_token!", 4)
+            if ( refreshAuthToken() ) {
+                // Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
+                LOG( "checkThermostatSummary() - Auth_token refreshed", 2, null, 'info')
             } else {
-        		LOG("checkThermostatSummary() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+                LOG( "checkThermostatSummary() - Auth_token refresh failed", 1, null, 'error')
             }
-    	} catch (java.util.concurrent.TimeoutException e) {
-    		LOG("checkThermostatSummary() - TimeoutException: ${e}.", 1, null, "warn")
-        	// Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
-        	if ( canSchedule() ) { runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true]) }
-       	 	result = false    
-    	}
-//	}
+        } else {
+        	LOG("checkThermostatSummary() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+        }
+    } catch (java.util.concurrent.TimeoutException e) {
+    	LOG("checkThermostatSummary() - TimeoutException: ${e}.", 1, null, "warn")
+        // Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
+        if ( canSchedule() ) { runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true]) }
+       	result = false    
+    }
+
     LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
 	return result
 }
