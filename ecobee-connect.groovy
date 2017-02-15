@@ -59,10 +59,14 @@
  *	0.10.23- Fixed humiditySetpoint (verify valid extendedRuntime data)
  *	0.10.24- Don't adjust Heating/Cooling setpoints during 'fan only'
  *	0.10.25- Optimized updates for setpoints and programs
+ * 	0.10.26- Removed pre-emptive Auth Refresh, per Ecobee API use guidelines 
+ *			 Hides the timeout error if auth refresh is successful
+ *			 Ensure auth refresh only occurs once, avoids multiple recovery threads
+ *			 Retry sendJson if fails on Auth expiry
  *
  *
  */  
-def getVersionNum() { return "0.10.25" }
+def getVersionNum() { return "0.10.26" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -811,6 +815,7 @@ def initialize() {
     atomicState.getWeather = true
     atomicState.runtimeUpdated = true
     atomicState.thermostatUpdated = true
+    atomicStat.sendJsonRetry = false
     atomicState.forcePoll= true				// make sure we get ALL the data after initialization
     
     def sunriseAndSunset = getSunriseAndSunset()
@@ -1009,7 +1014,7 @@ def userDefinedEvent(evt) {
 def scheduleWatchdog(evt=null, local=false) {
 	def results = true  
     if (debugLevel(4)) {
-    	def evtStr = evt ? "${evt.name}:{$evt.value}" : 'null'
+    	def evtStr = evt ? "${evt.name}:${evt.value}" : 'null'
     	LOG("scheduleWatchdog() called with evt (${evtStr}) & local (${local})", 4, null, "trace")
     }
     
@@ -1031,8 +1036,6 @@ def scheduleWatchdog(evt=null, local=false) {
     atomicState.lastWatchdogDate = getTimestamp()
     def pollAlive = isDaemonAlive("poll")
     def watchdogAlive = isDaemonAlive("watchdog")
-    def expiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 150000
-    def pollingInterval = getPollingInterval()
     
     LOG("After watchdog tagging",4,null,'trace')
 	if (apiConnected() == 'lost') {
@@ -1044,10 +1047,7 @@ def scheduleWatchdog(evt=null, local=false) {
 			LOG("scheduleWatchdog() - Unable to schedule handlers do to loss of API Connection. Please ensure you are authorized.", 1, null, "error")
 			return false
 		}
-	} else if (expiry <= ((pollingInterval + 2) * 60000)) {  	// We know we are called at the beginning of every scheduled poll (before calling the Ecobee API)
-    	LOG("scheduleWatchdog() - refreshing Token, ${String.format('%.2f',(expiry/60000))} minutes to expiry", 2, null, 'info')
-       	refreshAuthToken()
-    }
+	}
 
     LOG("scheduleWatchdog() --> pollAlive==${pollAlive}  watchdogAlive==${watchdogAlive}", 4, null, "debug")
     
@@ -1316,11 +1316,11 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 	String tstatsStr = ""
     int j=0        
 	
-	while ((statusCode != 0) && (j++ <2)) { // retries once if api call fails
+//	while ((statusCode != 0) && (j++ <1)) { // retries once if api call fails
 		try {
 			httpGet(pollParams) { resp ->
 				if(resp.status == 200) {
-					LOG("checkThermostatSummary() poll results returned resp.data ${resp.data}", 4)
+					LOG("checkThermostatSummary() - poll results returned resp.data ${resp.data}", 4)
 					statusCode = resp.data.status.code
 					if (statusCode == 0) { 
                     	def revisions = resp.data.revisionList
@@ -1331,7 +1331,7 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 						if (atomicState.lastRevisions == "foo") { // haven't finished (re)initializing yet
                             thermostatUpdated = true
                             runtimeUpdated = true
-                            tstatsStr = thermostatIdsString // act like all the thermostats have changed
+                            tstatsStr = thermostatIdsString 
                         } else {
 							result = false
 							for (i in 0..resp.data.thermostatCount - 1) {
@@ -1364,22 +1364,28 @@ private boolean checkThermostatSummary(thermostatIdsString) {
 					LOG("checkThermostatSummary() - polling got http status ${resp.status}", 1, null, "error")
 				}
 			}
-		} catch (groovyx.net.http.HttpResponseException e) {    
-        	LOG("checkThermostatSummary() - HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}", 1, null, "error")
-        	result = false
-         	if (e.response.data.status.code == 14) {
-            	atomicState.action = "pollChildren"
+		} catch (groovyx.net.http.HttpResponseException e) {   
+        	result = false // this thread failed to get the summary
+            if ((e.statusCode == 500) && (e.response.data.status.code == 14) /*&& ((atomicState.authTokenExpires - now()) <= 0) */){
+            	LOG("checkThermostatSummary() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+               	atomicState.action = "pollChildren"
             	LOG( "Refreshing your auth_token!", 4)
-            	if ( refreshAuthToken() ) { result = true } else { result = false }
-        	}
-			atomicState.forcePoll = true		// make pollEcobeeAPI poll anyway
+            	if ( refreshAuthToken() ) {
+                	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
+                	LOG( "checkThermostatSummary() - Auth_token refreshed", 2, null, 'info')
+                } else {
+                	LOG( "checkThermostatSummary() - Auth_token refresh failed", 1, null, 'error')
+                }
+            } else {
+        		LOG("checkThermostatSummary() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
+            }
     	} catch (java.util.concurrent.TimeoutException e) {
     		LOG("checkThermostatSummary() - TimeoutException: ${e}.", 1, null, "warn")
         	// Do not add an else statement to run immediately as this could cause an long looping cycle if the API is offline
         	if ( canSchedule() ) { runIn(atomicState.reAttemptInterval.toInteger(), "pollChildren", [overwrite: true]) }
        	 	result = false    
     	}
-	}
+//	}
     LOG("<===== Leaving checkThermostatSummary() result: ${result}, tstats: ${tstatsStr}", 4, null, "info")
 	return result
 }
@@ -1406,6 +1412,8 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
     		somethingChanged = true	
     	} else {
     		somethingChanged = checkThermostatSummary(thermostatIdsString)
+            thermostatUpdated = atomicState.thermostatUpdated				// update these again after checkThermostatSummary
+    		runtimeUpdated = atomicState.runtimeUpdated
     	}
     	// if nothing has changed, and this isn't a forced poll, just return (keep count of polls we have skipped)
     	// This probably can't happen anymore...shouldn't event be here if nothing has changed and not a forced poll...
@@ -1488,6 +1496,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 					String tid = stat.identifier.toString()
                     tidList += [tid]
                     LOG("pollEcobeeAPI() - Parsing data for thermostat ${tid}", 3, null, 'info')
+                    
 					tempEquipStat[tid] = stat.equipmentStatus // always store ("" is a valid return value)
                     
                     if (forcePoll || thermostatUpdated) {
@@ -1581,13 +1590,20 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
 				}
 			}
 		}
-	} catch (groovyx.net.http.HttpResponseException e) {    
-        LOG("pollEcobeeAPI()  HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}", 1, null, "error")
-        result = false
-         if (e.response.data.status.code == 14) {
-            atomicState.action = "pollChildren"
+	} catch (groovyx.net.http.HttpResponseException e) {  
+    	result = false  // this thread failed
+    	if ((e.statusCode == 500) && (e.response.data.status.code == 14)) {
+           	LOG("pollEcobeAPI() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+           	atomicState.action = "pollChildren"
             LOG( "Refreshing your auth_token!", 4)
-            if ( refreshAuthToken() ) { result = true } else { result = false }
+            if ( refreshAuthToken() ) { 
+            	// Note that refreshAuthToken will reschedule pollChildren if it succeeds in refreshing the token...
+                LOG( "checkThermostatSummary() - Auth_token refreshed", 2, null, 'info')
+            } else {
+                LOG( "checkThermostatSummary() - Auth_token refresh failed", 1, null, 'error')
+            }
+        } else {
+        	LOG("pollEcobeeAPI() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode} response.data.status.code: ${e.response.data.status.code}", 1, null, "error")
         }
     } catch (java.util.concurrent.TimeoutException e) {
     	LOG("pollEcobeeAPI(), TimeoutException: ${e}.", 1, null, "warn")
@@ -1846,8 +1862,8 @@ def updateThermostatData() {
         def fanMinOnTime = statSettings.fanMinOnTime
 		
 		// what program is supposed to be running now?
-        def scheduledClimateId = ""
-		def scheduledClimateName = ""
+        def scheduledClimateId = "unknown"
+		def scheduledClimateName = "Unknown"
         def schedClimateRef = ""
         if (program) {
         	scheduledClimateId = program.currentClimateRef 
@@ -1917,9 +1933,10 @@ def updateThermostatData() {
         		currentClimateName = scheduledClimateName
 				currentClimate = scheduledClimateName
 			} else {
-        		LOG("updateThermostatData() - No climateRef or running Event was found", 4, null, "info")
+        		LOG("updateThermostatData() - No climateRef or running Event was found", 1, null, "warn")
             	currentClimateName = ""
-        		currentClimateId = ""        	
+        		currentClimateId = "" 
+                currentClimate = ""
         	}
 		}
         LOG("updateThermostatData() - currentClimateName set = ${currentClimateName}  currentClimateId set = ${currentClimateId}", 4, null, "info")
@@ -2168,11 +2185,17 @@ def toQueryString(Map m) {
 private refreshAuthToken(child=null) {
 	LOG("Entered refreshAuthToken()", 5)	
 
-	// Update the timestamp for debugging purposes
+	def timeBeforeExpiry = atomicState.authTokenExpires ? atomicState.authTokenExpires - now() : 0
+    // check to see if token was recently refreshed (eliminate multiple concurrent threads)
+	if (timeBeforeExpiry > 2000) {
+    	LOG("refreshAuthToken() - skipping, token expires in ${timeBeforeExpiry/1000} seconds",3,null,'info')
+    	return true
+    }
+    
 	atomicState.lastTokenRefresh = now()
 	atomicState.lastTokenRefreshDate = getTimestamp()    
     
-	if(!atomicState.refreshToken) {    	
+	if (!atomicState.refreshToken) {    	
 		LOG("refreshAuthToken() - There is no refreshToken stored! Unable to refresh OAuth token.", 1, child, "error")
     	apiLost("refreshAuthToken() - No refreshToken")
         return false
@@ -2215,30 +2238,28 @@ private refreshAuthToken(child=null) {
                         if (oldAuthToken == atomicState.authToken) { 
                         	LOG("WARN: atomicState.authToken did NOT update properly! This is likely a transient problem.", 1, child, "warn")
 						}
-
                         
                         // Save the expiry time for debugging purposes
-                        LOG("refreshAuthToken() - Success! Token expires in ${String.format("%.2f",resp?.data?.expires_in/60)} minutes", 3, child, "info")
                         atomicState.authTokenExpires = (resp?.data?.expires_in * 1000) + now()
-                        LOG("Updated state.authTokenExpires = ${atomicState.authTokenExpires}", 4, child, "trace")
-
-						LOG("Refresh Token = state =${atomicState.refreshToken}  == in: ${resp?.data?.refresh_token}", 4, child, "trace")
-                        LOG("OAUTH Token = state ${atomicState.authToken} == in: ${resp?.data?.access_token}", 4, child, "trace")
-                        
-
-                        if(atomicState.action && atomicState.action != "") {
-                            LOG("Token refreshed. Executing next action: ${atomicState.action}", 4, child, "trace")
-                            "${atomicState.action}"()
-
-                            // Reset saved action
-                            atomicState.action = ""
-                            if ( canSchedule() ) runIn(15, "pollChildren", [overwrite: true])
+                        LOG("refreshAuthToken() - Success! Token expires in ${String.format("%.2f",resp?.data?.expires_in/60)} minutes", 3, child, "info")
+                        if (debugLevel(4)) {
+                        	LOG("Updated state.authTokenExpires = ${atomicState.authTokenExpires}", 4, child, "trace")
+                            LOG("Refresh Token = state =${atomicState.refreshToken} == in: ${resp?.data?.refresh_token}", 4, child, "trace")
+                        	LOG("OAUTH Token = state ${atomicState.authToken} == in: ${resp?.data?.access_token}", 4, child, "trace")
                         }
-
+                        
+                        def action = atomicState.action
+                        // Reset saved action
+                        atomicState.action = ""
+                        if (action) { // && atomicState.action != "") {
+                            LOG("Token refreshed. Rescheduling aborted action: ${action}", 4, child, "trace")
+                            runIn( 5, "${action}", [overwrite: true]) // this will collapse multiple threads back into just one
+                            // "${action}"()
+							// if ( canSchedule() && (action != 'pollChildren')) runIn(15, "pollChildren", [overwrite: true])
+                        }
                     } else {
                     	LOG("No jsonMap??? ${jsonMap}", 2, child, "trace")
-                    }
-                    
+                    }               
                     return true
                 } else {
                     LOG("refreshAuthToken() - Failed ${resp.status} : ${resp.status.code}!", 1, child, "error")
@@ -2246,27 +2267,28 @@ private refreshAuthToken(child=null) {
                 }
             }
         } catch (groovyx.net.http.HttpResponseException e) {
-        	//LOG("refreshAuthToken() - HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}  response? data: ${e.getResponse()?.getData()}", 1, null, "error")
-            LOG("refreshAuthToken() - HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}", 1, child, "error")
+        	def result = false
+        	//LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}  response? data: ${e.getResponse()?.getData()}", 1, null, "error")
+            LOG("refreshAuthToken() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}", 1, child, "error")
             if (e.statusCode != 401) {
             	runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true])
             } else if (e.statusCode == 401) {            
 				atomicState.reAttempt = atomicState.reAttempt + 1
 		        if (atomicState.reAttempt > 3) {                       	
     		    	apiLost("Too many retries (${atomicState.reAttempt - 1}) for token refresh.")        	    
-            	    return false
+            	    result = false
 		        } else {
     		    	LOG("Setting up runIn for refreshAuthToken", 4, child)
         			if ( canSchedule() ) {            			
                         runIn(atomicState.reAttemptInterval, "refreshAuthToken", [overwrite: true]) 
 					} else { 
     	        		LOG("Unable to schedule refreshAuthToken, running directly", 4, child)						
-	        	    	refreshAuthToken(child) 
+	        	    	result = refreshAuthToken(child) 
     	        	}
         		}
             }
             generateEventLocalParams() // Update the connected state at the thermostat devices
-            return false
+            return result
 		} catch (java.util.concurrent.TimeoutException e) {
 			LOG("refreshAuthToken(), TimeoutException: ${e}.", 1, child, "error")
 			// Likely bad luck and network overload, move on and let it try again
@@ -2361,7 +2383,7 @@ def setFanMinOnTime(child, deviceId, howLong) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("setFanMinOnTime(${howLong}) returned ${result}", 3, child,'info')    
+    LOG("setFanMinOnTime(${howLong}) returned ${result}", 4, child,'info')    
 
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
@@ -2396,7 +2418,7 @@ def setVacationFanMinOnTime(child, deviceId, howLong) {
     LOG("before sendJson() jsonRequestBody: ${jsonRequestBody}", 4, child, "info")
     
     def result = sendJson(child, jsonRequestBody)
-    LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 3, child, 'info') 
+    LOG("setVacationFanMinOnTime(${howLong}) returned ${result}", 4, child, 'info') 
 
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
@@ -2419,7 +2441,7 @@ def deleteVacation(child, deviceId, vacationName=null ) {
     def jsonRequestBody = '{"selection":{"selectionType":"thermostats","selectionMatch":"' + deviceId + '"},"functions":['+thermostatFunctions+']'+thermostatSettings+'}'
 	
     def result = sendJson(child, jsonRequestBody)
-    LOG("deleteVacation() returned ${result}", 3, child,'info') 
+    LOG("deleteVacation() returned ${result}", 4, child,'info') 
 
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
@@ -2450,7 +2472,7 @@ def setHold(child, heating, cooling, deviceId, sendHoldType=null, fanMode="", ex
     LOG("about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
     
 	def result = sendJson(child, jsonRequestBody)
-    LOG("setHold() returned ${result}", 3, child,'info')
+    LOG("setHold() returned ${result}", 4, child,'info')
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
 }
@@ -2465,7 +2487,7 @@ def setMode(child, mode, deviceId) {
 	def result = sendJson(jsonRequestBody)
     LOG("setMode to ${mode} with result ${result}", 4, child)
 	if (result) {
-    	LOG("setMode(${mode}) returned ${result}",3,child,"info")
+    	LOG("setMode(${mode}) returned ${result}", 4, child, "info")
     	child.generateQuickEvent("thermostatMode", mode, 15)
     } else {
     	LOG("setMode(${mode}) - Failed", 1, child, "warn")
@@ -2522,7 +2544,7 @@ def setFanMode(child, fanMode, deviceId, sendHoldType=null) {
     LOG("about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)
     
 	def result = sendJson(child, jsonRequestBody)
-    LOG("setFanMode(${fanMode}) returned ${result}", 3, child, 'info')
+    LOG("setFanMode(${fanMode}) returned ${result}", 4, child, 'info')
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result    
 }
@@ -2552,7 +2574,9 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
 	// {"functions":[{"type":"setHold","params":{"holdClimateRef":"sleep","holdType":"nextTransition"}}],"selection":{"selectionType":"thermostats","selectionMatch":"312989153500"}}	
     LOG("about to sendJson with jsonRequestBody (${jsonRequestBody}", 4, child)    
 	def result = sendJson(child, jsonRequestBody)	
-    LOG("setProgram(${climateRef}) returned ${result}", 3, child, 'info')
+    LOG("setProgram(${climateRef}) returned ${result}", 4, child, 'info')
+    if (result) {
+    }
     dirtyPollData()
     
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
@@ -2564,7 +2588,9 @@ private def sendJson(child=null, String jsonBody) {
 	// Reset the poll timer to allow for an immediate refresh
 	dirtyPollData()
     
-	def returnStatus = false
+	def returnStatus
+    def result = false
+    
 	def cmdParams = [
 			uri: apiEndpoint,
 			path: "/1/thermostat",
@@ -2584,6 +2610,7 @@ private def sendJson(child=null, String jsonBody) {
 				returnStatus = resp.data.status.code
 				if (resp.data.status.code == 0) {
 					LOG("Successful call to ecobee API.", 4, child)
+                    result = true
 					apiRestored()
                     generateEventLocalParams()
 				} else {
@@ -2598,16 +2625,28 @@ private def sendJson(child=null, String jsonBody) {
 			} // resp.status if/else
 		} // HttpPost
 	} catch (groovyx.net.http.HttpResponseException e) {
-    	LOG("sendJson() - HttpResponseException occured. Exception info: ${e} StatusCode: ${e.statusCode}  response? data: ${e.response.data.status.code}", 1, child, "error")	
-		if (e.response.data.status.code == 14) {
-	        // atomicState.connected = "warn"
-    	    atomicState.savedActionJsonBody = jsonBody
-        	atomicState.savedActionChild = child.deviceNetworkId
-        	atomicState.action = "sendJsonRetry"
-        	// generateEventLocalParams()
-        	refreshAuthToken(child)
+    	result = false // this thread failed...hopefully we can succeed after we refresh the auth_token
+        if ((e.statusCode == 500) && (e.response.data.status.code == 14)) {
+        	LOG("sendJson() - HttpResponseException occurred: Auth_token has expired", 3, null, "info")
+            // atomicState.savedActionJsonBody = jsonBody
+        	// atomicState.savedActionChild = child.deviceNetworkId
+        	// atomicState.action = "sendJsonRetry"
+            atomicState.action = ""					// we don't want refreshAuthToken to sendJsonRetry - we will retry ourselves instead
+           	LOG( "Refreshing your auth_token!", 4)
+           	if ( refreshAuthToken() ) { 
+                LOG( "sendJson() - Auth_token refreshed", 2, null, 'info')
+                if (!atomicState.sendJsonRetry) {
+                	atomicState.sendJsonRetry = true 		// retry only once
+                    LOG( "sendJson() - Retrying once...", 2, null, 'info')
+ 					result = sendJson( child, jsonBody )	// recursively re-attempt now that the token was refreshed
+                    LOG( "sendJson() - Retry ${result ? 'succeeded!' : 'failed.'}", 2, null, "${result ? 'info' : 'warn'}")
+                    atomicState.sendJsonRetry = false
+                }
+            } else {
+                LOG( "sendJson() - Auth_token refresh failed", 1, null, 'error') 
+            }
         } else {
-        	LOG("Error posting json received error status code: ${e.response.data.status.code}", 2, child, "warn")        
+        	LOG("sendJson() - HttpResponseException occurred. Exception info: ${e} StatusCode: ${e.statusCode}", 1, null, "error")
         }
     } catch(Exception e) {
     	// Might need to further break down 
@@ -2616,10 +2655,11 @@ private def sendJson(child=null, String jsonBody) {
         // generateEventLocalParams()
 	}
 
-	if (returnStatus == 0)
-		return true
-	else
-		return false
+//	if (returnStatus == 0)
+//		return true
+//	else
+//		return false
+	return result
 }
 
 private def sendJsonRetry() {
@@ -2952,8 +2992,8 @@ private debugLevel(level=3) {
 private def dirtyPollData() {
 	LOG("dirtyPollData() called to reset poll state", 5)
 	atomicState.forcePoll = true
-    atomicState.lastRevisions = "foo"
-    atomicState.latestRevisions = "bar"
+    //atomicState.lastRevisions = "foo"
+    //atomicState.latestRevisions = "bar"
 }
 
 private String fixDateTimeString( String dateStr, String timeStr) {
