@@ -40,10 +40,11 @@
  *	0.10.11- Misc notification cleanup
  *	0.10.12- Fixed humiditySetpoint reporting
  *	0.10.13- More sendEvent message cleanup; hide all the locally generated events from the notification queue
+ *  0.10.14- Fixed Motion message
  *
  */
 
-def getVersionNum() { return "0.10.13" }
+def getVersionNum() { return "0.10.14" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -671,6 +672,10 @@ def generateEvent(Map results) {
 				
 				case 'holdStatus': 
 					if (isChange) event = eventFront + [value: "${value}", descriptionText: "${value}", isStateChange: true, displayed: true]
+					break;
+                    
+              	case 'motion': 
+					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Motion is ${value}", isStateChange: true, displayed: true]
 					break;
 				
 				case 'fanMinOnTime':
