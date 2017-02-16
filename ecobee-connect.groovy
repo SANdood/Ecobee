@@ -66,7 +66,7 @@
  *
  *
  */  
-def getVersionNum() { return "0.10.26a" }
+def getVersionNum() { return "0.10.26b" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -815,7 +815,7 @@ def initialize() {
     atomicState.getWeather = true
     atomicState.runtimeUpdated = true
     atomicState.thermostatUpdated = true
-    atomicStat.sendJsonRetry = false
+    atomicState.sendJsonRetry = false
     atomicState.forcePoll= true				// make sure we get ALL the data after initialization
     
     def sunriseAndSunset = getSunriseAndSunset()
