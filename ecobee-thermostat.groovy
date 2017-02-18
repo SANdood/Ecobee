@@ -42,10 +42,11 @@
  *	0.10.13- More sendEvent message cleanup; hide all the locally generated events from the notification queue
  *	0.10.14- Fixed 'motion' message
  *	0.10.15- Fixed resumeProgram tile status
+ *	0.10.16- Changed heating/cooling slider UI to accommodate Android's lack of "/n" support
  *
  */
 
-def getVersionNum() { return "0.10.15" }
+def getVersionNum() { return "0.10.16" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -346,14 +347,14 @@ metadata {
 		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#ff9c14", unit: 'C'
 		}
-		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 2, inactiveLabel: false, decoration: "flat") {
-			state "heat", label:'${currentValue}°\nHeat', unit:"dF", backgroundColor:"#ff9c14"
+		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, inactiveLabel: false, decoration: "flat") {
+			state "heat", label:'${currentValue}°', unit:"dF", backgroundColor:"#ff9c14"
 		}
 		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor:"#2db9e7", unit: 'C'
 		}
-		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 2, height: 1, inactiveLabel: false, decoration: "flat") {
-			state "cool", label:'${currentValue}°\nCool', unit:"dF", backgroundColor:"#2db9e7"
+		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 1, height: 1, inactiveLabel: false, decoration: "flat") {
+			state "cool", label:'${currentValue}°', unit:"dF", backgroundColor:"#2db9e7"
 		}
 		standardTile("refresh", "device.thermostatMode", width: 2, height: 2,inactiveLabel: false, decoration: "flat") {
             state "default", action:"refresh.refresh", label: "Refresh", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
@@ -530,6 +531,12 @@ metadata {
         standardTile("commandDivider", "device.logo", inactiveLabel: false, width: 4, height: 1, decoration: "flat") {
         	state "default", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/command_divider.png"			
         }        
+        standardTile("cooling", "device.logo", inactiveLabel: false, width:1, height:1, decoration: "flat") {
+        	state "default", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_cool.png"
+        }
+        standardTile("heating", "device.logo", inactiveLabel: false, width:1, height:1, decoration: "flat") {
+        	state "default", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_heat.png"
+        }
     
 		main(["temperature", "temperatureDisplay"])
 		details([
@@ -545,8 +552,8 @@ metadata {
             "holdStatus", "fanMinOnTime", 
             "oneBuffer", "commandDivider", "oneBuffer",
             "modeShow", "fanModeLabeled",  "resumeProgram", 
-            "coolSliderControl", "coolingSetpoint",
-            "heatSliderControl", "heatingSetpoint",            
+            'cooling',"coolSliderControl", "coolingSetpoint",
+            'heating',"heatSliderControl", "heatingSetpoint",           
             "fanMode", "fanModeAutoSlider", "fanModeOnSlider", 
             // "currentProgram", "apiStatus",
             "setHome", "setAway", "setSleep",
