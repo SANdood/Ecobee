@@ -14,12 +14,14 @@
  * 
  *  See Changelog for change history
  *	0.10.1 - Tweaks to display decimal precision
- *	0.10.2 - Fixed so that Temperature shows in large font for Room/Thing List vies
+ *	0.10.2 - Fixed so that Temperature shows in large font for Room/Thing List views
+ *	0.10.3 - Added attributes/display of Climates this sensor is used in (TODO: ability to add/remove)
  *
  */
 
-def getVersionNum() { return "0.10.2" }
+def getVersionNum() { return "0.10.3" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}-RC8" }
+private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
 metadata {
 	definition (name: "Ecobee Sensor", namespace: "smartthings", author: "SmartThings") {
@@ -31,6 +33,10 @@ metadata {
 		
 		attribute "decimalPrecision", "number"
 		attribute "temperatureDisplay", "string"
+        attribute "Home", "string"
+        attribute "Away", "string"
+        attribute "Sleep", "string"
+        attribute "thermostatId", "string"
 	}
 
 	simulator {
@@ -72,9 +78,26 @@ metadata {
             state "default", action:"refresh.refresh", label: "Refresh", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
 		}
 
+		standardTile("Home", "device.Home", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+			state 'on', action:"noOp", nextState: "off", label:'on', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_home_blue.png"
+			state 'off', action: "noOp", nextState: 'on', label:'off', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_home_blue.png"
+		}
+        
+        standardTile("Away", "device.Away", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+			state "on", action:"noOp", nextState: "off", label:'on', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_away_blue.png"
+			state "off", action: "noOp", nextState: 'on', label:'off', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_away_blue.png"
+		}
+
+        standardTile("Sleep", "device.Sleep", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
+            state "on", action:"noOp", nextState: "off", label:'on', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
+			state "off", action: "noOp", nextState: 'on', label:'off', icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/schedule_asleep_blue.png"
+		}
+
 
 		main (["temperature", "temperatureDisplay",])
-		details(["temperatureDisplay","refresh"])
+		details(["temperatureDisplay",
+					"Home", "Away", "Sleep",
+                    "refresh"])
 	}
 }
 
@@ -88,10 +111,13 @@ void poll() {
 	parent.pollChildren(this)
 }
 
+void noOp() {}
 
 def generateEvent(Map results) {
 	def tempScale = getTemperatureScale()
-	log.debug "generateEvent(): parsing data $results. F or C? ${tempScale}"
+    def precision = device.currentValue("decimalPrecision")
+    if (!precision) precision = (tempScale == "C") ? 1 : 0
+	log.info "generateEvent(): parsing data $results."
 	if(results) {
 		String tempDisplay = ""
 		results.each { name, value ->			
@@ -115,10 +141,10 @@ def generateEvent(Map results) {
                     
                     // Generate the display value that will preserve decimal positions ending in 0
                     if (isChange) {
-						def precision = device.currentValue("decimalPrecision")
-                    	if (!precision) precision = (tempScale == "C") ? 1 : 0
+
                     	if (precision == 0) {
                     		tempDisplay = value.toDouble().round(0).toInteger().toString() + '°'
+                            log.debug "FOOO! ${value}"
                     	} else {
 							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
                     	}
@@ -140,10 +166,10 @@ def generateEvent(Map results) {
 				isChange = isStateChange(device, name, sendValue.toString())
 				// isDisplayed = isChange
 				if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue.toString(), isStateChange: true, displayed: true]
-			} else {
+			} else { // must be one of Home, Away, Sleep, decimalPrecision or thermostatId
 				isChange = isStateChange(device, name, value.toString())
 				// isDisplayed = isChange
-				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: value.toString(), isStateChange: true, displayed: true]
+				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: value.toString(), isStateChange: true, displayed: false]
             }
 			if (event != [:]) sendEvent(event)
 		}
@@ -157,6 +183,30 @@ def generateEvent(Map results) {
 def generateActivityFeedsEvent(notificationMessage) {
 	sendEvent(name: "notificationMessage", value: "$device.displayName $notificationMessage", descriptionText: "$device.displayName $notificationMessage", displayed: true)
 }
+
+void addSensorToProgram(programId) {
+	def result
+	if (programIdList().contains(programId.toLowerCase())) {
+    	result = parent.addSensorToProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
+    } else {
+    	LOG("addSensorToProgram(${programId}) - Bad argument, must be one of ${programIdList}",1,null,'error')
+    }
+}
+
+String getSensorId() {
+	def myId = []
+    myId = device.deviceNetworkId.split('-')
+    return (myId[1])
+}
+
+void deleteSensorFromProgram(programId) {
+	if (programIdList().contains(programId.toLowerCase())) {
+    	result = parent.deleteSensorFromProgram(this, device.currentValue('thermostatId'), getSensorId(), programId.toLowerCase())
+    } else {
+    	LOG("deleteSensorFromProgram(${programId}) - Bad argument, must be one of ${programIdList}",1,null,'error')
+    }
+}
+
 
 private debugLevel(level=3) {
 	def debugLvlNum = parent.settings.debugLevel?.toInteger() ?: 3
