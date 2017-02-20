@@ -41,12 +41,13 @@
  *	0.10.12- Fixed humiditySetpoint reporting
  *	0.10.13- More sendEvent message cleanup; hide all the locally generated events from the notification queue
  *	0.10.14- Fixed 'motion' message
- *	0.10.15- Fixed resumeProgram tile status
- *	0.10.16- Changed heating/cooling slider UI to accommodate Android's lack of "/n" support
+ *	0.10.15- Fixed resumeProgram tile status'
+ *	0.10.16- Changed Heat/Cooling Slider UI
+ *	0.10.17- Work In Process
  *
  */
 
-def getVersionNum() { return "0.10.16" }
+def getVersionNum() { return "0.10.17" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -345,7 +346,7 @@ metadata {
 			state "setpoint", action:"lowerSetpoint", icon:"st.thermostat.thermostat-down"
 		}
 		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
-			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#ff9c14", unit: 'C'
+			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint",  backgroundColor:"#ff9c14", unit: 'C'
 		}
 		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, inactiveLabel: false, decoration: "flat") {
 			state "heat", label:'${currentValue}°', unit:"dF", backgroundColor:"#ff9c14"
@@ -530,7 +531,7 @@ metadata {
         }
         standardTile("commandDivider", "device.logo", inactiveLabel: false, width: 4, height: 1, decoration: "flat") {
         	state "default", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/command_divider.png"			
-        }        
+        }    
         standardTile("cooling", "device.logo", inactiveLabel: false, width:1, height:1, decoration: "flat") {
         	state "default", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/operatingstate_cool.png"
         }
@@ -553,7 +554,7 @@ metadata {
             "oneBuffer", "commandDivider", "oneBuffer",
             "modeShow", "fanModeLabeled",  "resumeProgram", 
             'cooling',"coolSliderControl", "coolingSetpoint",
-            'heating',"heatSliderControl", "heatingSetpoint",           
+            'heating',"heatSliderControl", "heatingSetpoint",            
             "fanMode", "fanModeAutoSlider", "fanModeOnSlider", 
             // "currentProgram", "apiStatus",
             "setHome", "setAway", "setSleep",
@@ -599,13 +600,12 @@ def generateEvent(Map results) {
     def isMetric = wantMetric()
 
 	def updateTempRanges = false
-    def precision = device.currentValue('decimalPrecision')
-    if (!precision) precision = isMetric ? 1 : 0
+    def precision = device.currentValue("decimalPrecision")
+    if (!precision) precision = (tempScale == "C") ? 1 : 0
 	
 	if(results) {
 		results.each { name, value ->
 			LOG("generateEvent() - In each loop: name: ${name}  value: ${value}", 4)
-			def isDisplayed = true
             String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, handlerName: name]
 			def event = [:]
@@ -617,16 +617,18 @@ def generateEvent(Map results) {
 				case 'coolingSetpoint':
 				case 'weatherTemperature':
                 case 'thermostatSetpoint':
-                    String sendValue = "${value}"		// Already rounded to appropriate user precision (except temperature, which is sent in API precision)
-                    if (isChange) event = eventFront + [value: sendValue,  descriptionText: getTemperatureDescriptionText(name, value, linkText), isStateChange: true, displayed: true]
-					if (name=="temperature") {
-						// Generate the display value that will preserve decimal positions ending in 0
-                    	if (precision == 0) {
-                    		tempDisplay = value.toDouble().round(0).toString() + '°'
-                    	} else {
-							tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
-                    	}
-					} 
+                    if (isChange) {
+                    	String sendValue = "${value}"		// Already rounded to appropriate user precision (except temperature, which is sent in API precision)
+                    	event = eventFront + [value: sendValue,  descriptionText: getTemperatureDescriptionText(name, value, linkText), isStateChange: true, displayed: true]
+						if (name=="temperature") {
+							// Generate the display value that will preserve decimal positions ending in 0
+                    		if (precision == 0) {
+                    			tempDisplay = value.toDouble().round(0).toInteger().toString() + '°'
+                    		} else {
+								tempDisplay = String.format( "%.${precision.toInteger()}f", value.toDouble().round(precision.toInteger())) + '°'
+                    		}
+						} 
+                    }
 					break;
 				
 				case 'thermostatOperatingState':
@@ -638,8 +640,10 @@ def generateEvent(Map results) {
 					break;
 				
 				case 'equipmentStatus':
-				  	String descText = (value == 'idle') ? 'Equipment is idle' : "Equipment: ${value} running"
-					if (isChange) event = eventFront +  [value: "${value}", descriptionText: descText, isStateChange: true, displayed: false]
+					if (isChange) {
+                    	String descText = (value == 'idle') ? 'Equipment is idle' : "Equipment: ${value} running"
+                    	event = eventFront +  [value: "${value}", descriptionText: descText, isStateChange: true, displayed: false]
+                    }
 					break;
 				
            		case 'lastPoll':
@@ -651,8 +655,10 @@ def generateEvent(Map results) {
             		break;
 				
 				case 'humiditySetpoint':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Humidity setpoint is ${value}%", isStateChange: true, displayed: false]
-		            sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${device.currentValue('humidity')}% (setpoint: ${value}%)", isStateChange: false, displayed: true )
+					if (isChange) {
+                    	event = eventFront + [value: "${value}", descriptionText: "Humidity setpoint is ${value}%", isStateChange: true, displayed: false]
+		            	sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${device.currentValue('humidity')}% (setpoint: ${value}%)", isStateChange: false, displayed: true )
+                    }
                     break;
 				
 				case 'currentProgramName':
@@ -674,8 +680,10 @@ def generateEvent(Map results) {
 					break;
 				
 				case 'thermostatHold':
-					String descText = (value == "") ? 'Hold finished' : (value == 'hold') ? "Hold: ${device.currentValue('currentProgram')} (${device.currentValue('scheduledProgram')})" : "Hold for ${value}"
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: descText, isStateChange: true, displayed: true]
+					if (isChange) {
+                    	String descText = (value == "") ? 'Hold finished' : (value == 'hold') ? "Hold: ${device.currentValue('currentProgram')} (${device.currentValue('scheduledProgram')})" : "Hold for ${value}"
+                    	event = eventFront + [value: "${value}", descriptionText: descText, isStateChange: true, displayed: true]
+                    }
 					break;
 				
 				case 'holdStatus': 
