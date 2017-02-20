@@ -63,10 +63,11 @@
  *			 Hides the timeout error if auth refresh is successful
  *			 Ensure auth refresh only occurs once, avoids multiple recovery threads
  *			 Retry sendJson if fails on Auth expiry
+ *	0.10.27- Update configured/selected sensors only, and then only when there are changes; send full precision to sensors
  *
  *
  */  
-def getVersionNum() { return "0.10.26b" }
+def getVersionNum() { return "0.10.27" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1238,11 +1239,26 @@ def pollChildren(child = null) {
         LOG("pollChildren() - Nothing has changed.", 2, child, 'info')
         // generateEventLocalParams() // Update any local parameters and send
     }
+    
     Integer numSensors = 0
-	
     if (forcePoll || somethingChanged) {
-		// Iterate over all the children
-		def d = getChildDevices()
+		// Iterate over ONLY THE CHILDREN THAT HAVE DATA - this is MUCH faster than iterating over ALL the children, because
+        // we now only send changed data for changed thermostats
+ //       def startTime = now()
+        atomicState.thermostats?.each { DNI ->
+        	getChildDevice(DNI.key).generateEvent(DNI.value.data)
+        }
+//        def sensorsData = atomicState.remoteSensorsData
+//        if (sensorsData) { 
+//        	settings.ecobeesensors?.each {DNI ->
+        atomicState.remoteSensorsData?.each { DNI ->
+        	getChildDevice(DNI.key)?.generateEvent(DNI.value.data)
+        }
+ //       def endTime = now()
+ //       log.trace "generateEvent: ${endTime - startTime}"
+       
+/* 
+      def d = getChildDevices()
     	d?.each() { oneChild ->
     		LOG("pollChildren() - Processing poll data for child: ${oneChild} has ${oneChild.capabilities}", 4, child, 'info')
         
@@ -1259,7 +1275,8 @@ def pollChildren(child = null) {
             	oneChild.generateEvent(atomicState.remoteSensorsData[oneChild.device.deviceNetworkId]?.data)
 			}
 		}
-    }
+*/
+	}
     if (numSensors > 0) LOG("pollChildren() - Events transferred to ${numSensors} sensors",3,null,'info')
     return results
 }
@@ -1269,6 +1286,16 @@ def pollChildren(child = null) {
 private def generateEventLocalParams() {
 	// Iterate over all the children
     LOG("generateEventLocalParams() - updating API status", 3, null, 'info')
+    def connected = apiConnected()
+    def data = [
+       	apiConnected: connected
+    ]
+    
+    settings.thermostats?.each {
+    	getChildDevice(it)?.generateEvent(data)
+     }
+ 
+ /*
 	def d = getChildDevices()
     d?.each() { oneChild ->
     	LOG("generateEventLocalParams() - Processing data for child: ${oneChild} has ${oneChild.capabilities}", 4, "", 'info')
@@ -1276,10 +1303,7 @@ private def generateEventLocalParams() {
     	if( oneChild.hasCapability("Thermostat") ) {
         	// We found a Thermostat, send local params as events
             LOG("generateEventLocalParams() - We found a Thermostat!", 4)
-            def connected = apiConnected()
-            def data = [
-            	apiConnected: connected
-            ]
+
             
             // Update the API connected state for ALL the associated thermostats
             // Note that we can't modify a Map element in atomicState directly - we have to read to a local variable, modify, then write it back
@@ -1287,13 +1311,14 @@ private def generateEventLocalParams() {
             Map tempData = atomicState.thermostats
             tempData[oneChild.device.deviceNetworkId]?.data?.apiConnected = connected
             atomicState.thermostats = tempData
-            if (data) oneChild.generateEvent(data)
+            oneChild.generateEvent(data)
         } else {
         	// We must have a remote sensor
             // LOG("generateEventLocalParams() - Updating sensor data: ${oneChild.device.deviceNetworkId}", 4)
 			// No local params to send            
         } 
     }
+    */
 }
 
 // Checks if anything has changed since the last time this routine was called, using lightweight thermostatSummary poll
@@ -1552,8 +1577,7 @@ private def pollEcobeeAPI(thermostatIdsString = "") {
                 updateLastPoll()
                 LOG("pollEcobeeAPI() - Parsing complete", 3, null, 'info')
                 // Update the data and send it down to the devices as events
-				if (forcePoll || runtimeUpdated) updateSensorData()	// only update if we got updates
-                													// TODO: need to figure out how to update only the sensors on thermostats that were updated
+				if (settings.ecobeesensors) updateSensorData()		// Only update configured sensors (and then only if they have changes)
                 updateThermostatData()  							// update everything else
 
 				result = true
@@ -1652,6 +1676,9 @@ def updateSensorData() {
  	def sensorCollector = [:]
     def sNames = []
     Integer precision = getTempDecimals()
+    def forcePoll = atomicState.forcePoll
+    def thermostatChanged = atomicState.thermostatChanged
+    
     atomicState.thermostatData.thermostatList.each { singleStat ->
     	def tid = singleStat.identifier
     
@@ -1659,63 +1686,98 @@ def updateSensorData() {
 			if ( ( it.type == "ecobee3_remote_sensor" ) || (it.type == "control_sensor") || ((it.type == "thermostat") && (settings.showThermsAsSensor)) ) {
 				// Add this sensor to the list
 				def sensorDNI 
-                sNames += it.name
                	if (it.type == "ecobee3_remote_sensor") { 
                		sensorDNI = "ecobee_sensor-" + it?.id + "-" + it?.code 
 				} else if (it.type == "control_sensor") {
-               		LOG("We have a Smart SI style control_sensor! it=${sensor}", 4, null, "trace")
+               		LOG("We have a Smart SI style control_sensor! it=${it}", 4, null, "trace")
                    	sensorDNI = "control_sensor-" + it?.id 
                	} else { 
-               		LOG("We have a Thermostat based Sensor! it=${sensor}", 4, null, "trace")
+               		LOG("We have a Thermostat based Sensor! it=${it}", 4, null, "trace")
                		sensorDNI = "ecobee_sensor_thermostat-"+ it?.id + "-" + it?.name
 				}
 				LOG("sensorDNI == ${sensorDNI}", 4)
-            	                
-				def temperature = ""
-				def occupancy = ""
+            	              
+                if (settings.ecobeesensors?.contains(sensorDNI)) {		// only process the selected/configured sensors
+					def temperature = ""
+					def occupancy = ""
                             
-				it.capability.each { cap ->
-					if (cap.type == "temperature") {
-                   		LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
-                       	if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
-							temperature = cap.value as Double
-							temperature = (temperature / 10).toDouble().round(precision) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
-                       	} else if (cap.value == "unknown") {
-                       		// TODO: Do something here to mark the sensor as offline?
-                           	LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
-                           	// Need to mark as offline somehow
-                           	temperature = "unknown"   
-                       	} else {
-                       		LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned ${cap.value}.", 1, null, "error")
-                       	}
-					} else if (cap.type == "occupancy") {
-						if(cap.value == "true") {
-							occupancy = "active"
-						} else if (cap.value == "unknown") {
-                       		// Need to mark as offline somehow
-                           	LOG("Setting sensor occupancy to unknown", 2, null, "warn")
-                           	occupancy = "unknown"
-                       	} else {
-							occupancy = "inactive"
-						}                            
+					it.capability.each { cap ->
+						if (cap.type == "temperature") {
+                   			LOG("updateSensorData() - Sensor (DNI: ${sensorDNI}) temp is ${cap.value}", 4)
+                       		if ( cap.value.isNumber() ) { // Handles the case when the sensor is offline, which would return "unknown"
+								temperature = cap.value as Double
+								temperature = (temperature / 10).toDouble()  //.round(precision) // wantMetric() ? (temperature / 10).toDouble().round(1) : (temperature / 10).toDouble().round(1)
+                       		} else if (cap.value == "unknown") {
+                       			// TODO: Do something here to mark the sensor as offline?
+                           		LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned unknown temp value. Perhaps it is unreachable.", 1, null, "warn")
+                           		// Need to mark as offline somehow
+                           		temperature = "unknown"   
+                       		} else {
+                       			LOG("updateSensorData() - sensor (DNI: ${sensorDNI}) returned ${cap.value}.", 1, null, "error")
+                       		}
+						} else if (cap.type == "occupancy") {
+							if(cap.value == "true") {
+								occupancy = "active"
+							} else if (cap.value == "unknown") {
+                       			// Need to mark as offline somehow
+                           		LOG("Setting sensor occupancy to unknown", 2, null, "warn")
+                           		occupancy = "unknown"
+                       		} else {
+								occupancy = "inactive"
+							}                            
+						}
 					}
-				}
                                             				
-				def sensorData = [ decimalPrecision: precision ]
-				sensorData << [
-					temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", precision))					
-                ]
-               	if (occupancy != "") {
-               		sensorData << [ motion: occupancy ]
-               	}
-				sensorCollector[sensorDNI] = [name:it.name,data:sensorData]
-                LOG("sensorCollector being updated with sensorData: ${sensorData}", 4)
+					def sensorData = [ decimalPrecision: precision ]
+                	def sensorList = []
+					sensorData << [
+						temperature: ((temperature == "unknown") ? "unknown" : myConvertTemperatureIfNeeded(temperature, "F", precision+1))					
+                	]
+                	sensorList += [sensorData.temperature]
+                
+               		if (occupancy != "") {
+               			sensorData << [ motion: occupancy ]
+                    	sensorList += [occupancy]
+               		}
+                	sensorList += [precision]
+               
+               		// collect the climates that this sensor is included in
+               		if (forcePoll || thermostatUpdated) {	// these will only change when the program object changes
+                		def sensorClimates = [:]
+                		def statProgram = atomicState.program[tid]
+                		if (statProgram?.climates) {
+                			statProgram.climates.each { climate ->
+                    			def sids = climate.sensors?.collect { sid -> sid.name}
+                        		if (sids.contains(it.name)) {
+                        			sensorClimates << ["${climate.name}":'on']
+                                	sensorList += ['on']
+                        		} else {
+                        			sensorClimates << ["${climate.name}":'off']
+                                	sensorList += ['off']
+                        		}
+                    		}
+                		}
+                		LOG("se	nsor ${it.name} is used in ${sensorClimates}", 4, null, 'trace')
+						sensorData << sensorClimates
+                    	sensorData << [ thermostatId: tid ]
+                	}
+                
+                	// only send if the data for this sensor has changed
+                	def lastList = atomicState."${sensorDNI}"
+                	if (forcePoll || !lastList || (lastList != sensorList)) {
+						sensorCollector[sensorDNI] = [name:it.name,data:sensorData]
+                    	LOG("sensorCollector being updated with sensorData: ${sensorData}", 4)
+                    	atomicState."${sensorDNI}" = sensorList
+                    	sNames += it.name
+                	}
+                } // end sensor is selected in settings
 			} // end sensor type check if
 		} // End [tid] sensors loop
 	} // End thermostats loop
 	atomicState.remoteSensorsData = sensorCollector
     if (debugLevel(2)) {
-        LOG("updateSensorData() - Event data updated for ${sNames.size()} sensors ${sNames}",2, null, 'info')
+    	def sz = sNames.size()
+        LOG("updateSensorData() - Event data updated for ${sz} sensor${sz!=1?'s':''}${sNames?' '+sNames:''}",2, null, 'info')
 		// LOG("updateSensorData(): Sensor updates completed",3, null, 'info')
     } else {
 		LOG("updateSensorData() - Updated these remoteSensors: ${sensorCollector}", 4, null, 'trace') 
@@ -2580,6 +2642,14 @@ def setProgram(child, program, deviceId, sendHoldType=null) {
     
 	if (canSchedule()) runIn( 5, "pollChildren", [overwrite: true])
     return result
+}
+
+def addSensorToProgram(child, deviceId, sensorId, programId) {
+
+	def program = atomicState.program[deviceId]
+}
+
+def deleteSensorFromProgram(child, deviceId, sensorId, programId) {
 }
 
 // API Helper Functions
