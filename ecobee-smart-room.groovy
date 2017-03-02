@@ -43,13 +43,13 @@ def mainPage() {
         }
         
         section(title: "Select ecobee Sensor") {
-        	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-            paragraph("A 'Smart Room' is defined by a specific ecobee Sensor. Additional temperature and motion sensors can be selected separately below.")
+        	if (settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
+            paragraph("A 'Smart Room' is defined by a specific ecobee Sensor. Additional temperature, motion, door/windows contact sensors and automated vents can be selected separately below.")
         	input(name: "theSensor", type:"enum", title: "Use which Ecobee Sensor", options: getSensorsList(), required: true, multiple: false, submitOnChange: true)            
 		}
-                
+        
         section(title: "Smart Room Doors") {
-            paragraph("'Doors' are used by a 'Smart Room' to turn a room on or off."
+            paragraph("'Doors' are used by a 'Smart Room' to turn a room on or off.")
             input(name: "theDoors", title: "Use which Door contact sensor(s)", type: "capability.contactSensor", required: true, multiple: true, submitOnChange: true)
             paragaph("An open door signals to bring this Smart Room on-line. How long should the door be open before the room is considered on-line?")
             input(name: "doorOpenMinutes", title: "Door open for how many minutes brings this Smart Room on-line?", type: number, required: true, defaultValue: '5', description: '5', range: "5..60")
@@ -70,6 +70,9 @@ def mainPage() {
         }
        
 		section(title: "Smart Room - Additional Sensors") {
+        }
+        
+        section(title: "Smart Room - Only Active during SmartThings Modes or Ecobee Programs") {
         	paragraph("Circulation time (min/hr) is only adjusted while in these modes *OR* programs. The time will remain at the last setting while in other modes. If you want different circulation times for other modes or programs, create multiple Smart Circulation handlers.")
             input(name: "theModes",type: "mode", title: "Only when the Location Mode is", multiple: true, required: false)
             input(name: "thePrograms", type: "enum", title: "Only when the ${theThermostat ? theThermostat : 'thermostat'}'s Program is", multiple: true, required: false, options: getProgramsList())
