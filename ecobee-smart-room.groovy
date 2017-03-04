@@ -111,4 +111,4 @@ private def LOG(message, level=3, child=null, logType="debug", event=true, displ
 	message = "${app.label} ${message}"
 	if (parent) parent.LOG(message, level, child, logType, event, displayEvent)
     if (level <= 4) log."${logType}" message
-}
+} 
