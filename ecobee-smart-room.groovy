@@ -23,7 +23,7 @@ definition(
 	name: "ecobee Smart Room",
 	namespace: "smartthings",
 	author: "Barry A. Burke (storageanarchy at gmail dot com)",
-	description: "Automates a "room" ecobee sensor, door, windows, occupancy.",
+	description: "Automates a "room" with sensors (ecobee sensor, door, windows, occupancy), adding/removing the room from selected climates and (optionally) opening/closing SmartThings-controlled vents.",
 	category: "Convenience",
 	parent: "smartthings:Ecobee (Connect)",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Partner/ecobee.png",
@@ -44,12 +44,12 @@ def mainPage() {
         
         section(title: "Select ecobee Sensor") {
         	if (settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-            paragraph("A 'Smart Room' is defined by a specific ecobee Sensor. Additional temperature, motion, door/windows contact sensors and automated vents can be selected separately below.")
-        	input(name: "theSensor", type:"enum", title: "Use which Ecobee Sensor", options: getSensorsList(), required: true, multiple: false, submitOnChange: true)            
+            paragraph("A 'Smart Room' is defined by a specific collections of one or more Ecobee Sensors. Additional temperature, motion, door/windows contact sensors and automated vents can be selected separately below.")
+        	input(name: "theSensors", type:"device.ecobeeSensor", title: "Use which Ecobee Sensor(s)", required: true, multiple: true, submitOnChange: true)            
 		}
         
         section(title: "Smart Room Doors") {
-            paragraph("'Doors' are used by a 'Smart Room' to turn a room on or off.")
+            paragraph("'Doors' are used by a 'Smart Room' to turn a room on or off based on if/when/duration the door is open or closed.")
             input(name: "theDoors", title: "Use which Door contact sensor(s)", type: "capability.contactSensor", required: true, multiple: true, submitOnChange: true)
             paragaph("An open door signals to bring this Smart Room on-line. How long should the door be open before the room is considered on-line?")
             input(name: "doorOpenMinutes", title: "Door open for how many minutes brings this Smart Room on-line?", type: number, required: true, defaultValue: '5', description: '5', range: "5..60")
@@ -66,7 +66,7 @@ def mainPage() {
        
         section(title: "Smart Room Vents") {
         	paragraph("Smart Rooms will automatically open vents when on-line, and close them when off-line")
-            input(name: "theVents", type: "ADJUSTABLE VENTS", title: "Control which vent(s)", required: true, multiple:true)
+            input(name: "theVents", type: "device.econetVent", title: "Control which vent(s)", required: false, multiple:true)
         }
        
 		section(title: "Smart Room - Additional Sensors") {
