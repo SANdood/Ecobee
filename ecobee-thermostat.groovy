@@ -44,10 +44,11 @@
  *	0.10.15- Fixed resumeProgram tile status'
  *	0.10.16- Changed Heat/Cooling Slider UI
  *	0.10.17- Work In Process
+ *	0.10.17a HOT FIX for Temperature Icon (Android Mobile App 2.3.1 issue)
  *
  */
 
-def getVersionNum() { return "0.10.17" }
+def getVersionNum() { return "0.10.17a" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -312,7 +313,7 @@ metadata {
 		}
 
 		standardTile("fanCirculate", "device.thermostatFanMode", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "circulate", label:"Fan Cicrulate", action:"thermostat.fanCirculate", nextState: "updating", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_fan_big_nolabel.png"
+			state "circulate", label:"Fan Circulate", action:"thermostat.fanCirculate", nextState: "updating", icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/systemmode_fan_big_nolabel.png"
             state "updating", label:"Working", icon: "st.secondary.secondary"
 		}
         
@@ -349,13 +350,13 @@ metadata {
 			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint",  backgroundColor:"#ff9c14", unit: 'C'
 		}
 		valueTile("heatingSetpoint", "device.heatingSetpoint", height: 1, width: 1, inactiveLabel: false, decoration: "flat") {
-			state "heat", label:'${currentValue}°', unit:"dF", backgroundColor:"#ff9c14"
+			state "heat", label:'${currentValue}°'//, unit:"F", backgroundColor:"#ff9c14"
 		}
 		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 4, inactiveLabel: false, range: getSliderRange() /* "(15..85)" */ ) {
 			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor:"#2db9e7", unit: 'C'
 		}
 		valueTile("coolingSetpoint", "device.coolingSetpoint", width: 1, height: 1, inactiveLabel: false, decoration: "flat") {
-			state "cool", label:'${currentValue}°', unit:"dF", backgroundColor:"#2db9e7"
+			state "cool", label:'${currentValue}°'//, unit:"F", backgroundColor:"#2db9e7"
 		}
 		standardTile("refresh", "device.thermostatMode", width: 2, height: 2,inactiveLabel: false, decoration: "flat") {
             state "default", action:"refresh.refresh", label: "Refresh", icon:"https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/header_ecobeeicon_blk.png"
@@ -507,7 +508,8 @@ metadata {
 			state "121",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_fog_18_fc.png" // Dust
 		}
         standardTile("weatherTemperature", "device.weatherTemperature", width: 2, height: 2, decoration: "flat") {
-			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
+			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/thermometer.png"
+				// "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
 		}
         
         valueTile("lastPoll", "device.lastPoll", height: 1, width: 5, decoration: "flat") {
