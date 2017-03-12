@@ -45,10 +45,11 @@
  *	0.10.16- Changed Heat/Cooling Slider UI
  *	0.10.17- Work In Process
  *	0.10.17a HOT FIX for Temperature Icon (Android Mobile App 2.3.1 issue)
+ *	0.10.17b Replaced bad thermometer icon
  *
  */
 
-def getVersionNum() { return "0.10.17a" }
+def getVersionNum() { return "0.10.17b" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -508,8 +509,7 @@ metadata {
 			state "121",			icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/weather_fog_18_fc.png" // Dust
 		}
         standardTile("weatherTemperature", "device.weatherTemperature", width: 2, height: 2, decoration: "flat") {
-			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/StrykerSKS/SmartThings/master/smartapp-icons/ecobee/png/thermometer.png"
-				// "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
+			state "default", action: "noOp", nextState: "default", label: 'Out: ${currentValue}°', icon: "https://raw.githubusercontent.com/SANdood/Ecobee/master/icons/thermometer_fc.png"
 		}
         
         valueTile("lastPoll", "device.lastPoll", height: 1, width: 5, decoration: "flat") {
