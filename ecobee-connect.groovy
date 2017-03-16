@@ -69,12 +69,13 @@
  *			 Added capability to add/remove a sensor from a climate/program
  *	1.0.0 -	 Final preparation for general release
  *	1.0.1 -	 Added "Offline" status when ecobee Cloud loses connection with thermostat (power out, network down, etc.)
+ *	1.0.2 -	 Chasing another uninitialized variable issue
  *
  *
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.0.1" }
+def getVersionNum() { return "1.0.2" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1577,6 +1578,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                        	Boolean needExtRT = false
 			       		tempSettings.each { 
             				if (!needExtRT && checkTherms.contains(it.key)){
+                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}"
             					switch (it.value.hvacMode) {
             						case 'heat':
                                     case 'auxHeatOnly':
@@ -1903,12 +1905,15 @@ def updateThermostatData() {
 				LOG("updateThermostatData() - thermSensor == ${thermSensor}", 4 )
         
 				def occupancyCap = thermSensor?.capability.find { it.type == 'occupancy' }
-				LOG("updateThermostatData() - occupancyCap = ${occupancyCap} value = ${occupancyCap.value}", 4, null, 'info')
+                if (occupancyCap) {
+					LOG("updateThermostatData() - occupancyCap = ${occupancyCap} value = ${occupancyCap.value}", 4, null, 'info')
         
-				// Check to see if there is even a value, not all types have a sensor
-				occupancy =  occupancyCap.value ?: 'not supported'
+					// Check to see if there is even a value, not all types have a sensor
+                    occupancy = occupancyCap.value ? occupancyCap.value : 'not supported'
+                }
         	}
-			if (hasInternalSensors) { occupancy = (occupancy == 'true') ? 'active' : ((occupancy == ' unknown') ? 'unknown' : 'inactive') }            
+            // 'not supported' is reported as 'inactive'
+			if (hasInternalSensors) { occupancy = (occupancy == 'true') ? 'active' : ((occupancy == 'unknown') ? 'unknown' : 'inactive') }            
             
 			// Temperatures
             // NOTE: The thermostat always present Fahrenheit temps with 1 digit of decimal precision. We want to maintain that precision for inside temperature so that apps like vents and Smart Circulation
