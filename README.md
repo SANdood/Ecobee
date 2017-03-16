@@ -71,12 +71,12 @@ This work represents a significant overhaul of the aforemention prior implementa
       events. 
    * Polling Frequency: As a result of the aforementioned operational efficiency enhancements, it is now possible to run ecobee 
      thermostat devices with very short polling frequency - as low as once per minute. Although Ecobee documents that none of the 
-     API's data objects are updated more frequently than every 3 minutes, this has been observed to not be true. Many operations that
+     API's data objects are updated more frequently than every 3 minutes, this has been observed to not be true. Many operations
      will cause the thermostat to be immediately updated, such as when resuming a program or cancelling an active vacation. 
-    * NOTE: Your mileage may vary - ecobee does in fact recommend <i><u>a minimum of 3 minutes</u></i>, and they may choose to prohibit 
-      shorter polling frequencies at any time.
-    * It is now possible to select a 2 minute polling frequency, which is perhaps a happy medium between the Ecobee-recommended 3 minute 
-      minimum poll time, and the 1 minute frequency used primarily for debugging.
+      * NOTE: Your mileage may vary - ecobee does in fact recommend <i><u>a minimum of 3 minutes</u></i>, and they may choose to prohibit 
+        shorter polling frequencies at any time.
+      * It is now possible to select a 2 minute polling frequency, which is perhaps a happy medium between the Ecobee-recommended 3 
+        minute minimum poll time, and the 1 minute frequency used primarily for debugging.
   * Watchdog Devices: A practical alternative to short polling frequency is now to configure one or more "watchdog" devices. In addition 
     to ensuring that the scheduled polls haven't gotten derailed by the SmartThings infrastructure, an event from, say, a temperature 
     change on a SmartThings MultiSensor will also cause a poll of the ecobee API to check if anything has changed. If not, no foul - the 
