@@ -69,13 +69,13 @@
  *			 Added capability to add/remove a sensor from a climate/program
  *	1.0.0 -	 Final preparation for general release
  *	1.0.1 -	 Added "Offline" status when ecobee Cloud loses connection with thermostat (power out, network down, etc.)
- *	1.0.2 -	 Chasing another uninitialized variable issue
+ *	1.0.2a -	 Chasing another uninitialized variable issue
  *
  *
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.0.2" }
+def getVersionNum() { return "1.0.2a" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1578,7 +1578,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                        	Boolean needExtRT = false
 			       		tempSettings.each { 
             				if (!needExtRT && checkTherms.contains(it.key)){
-                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}"
+                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}",2,null,'info')
             					switch (it.value.hvacMode) {
             						case 'heat':
                                     case 'auxHeatOnly':
