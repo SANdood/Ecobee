@@ -30,7 +30,7 @@ Follow These Steps
 2. Save and 'Publish / For Me' each of the above. 
 <b>DO NOT try to run any of these until you have completed step 5 below!</b>
 
-3. For Ecobee (Connect) SmartApp, be sure to enable OAuth. In the IDE, while you have Ecobee (Connect) open, Click on "App Settings" (top right), then select the OAuth tab and enable OAuth.
+3. For Ecobee (Connect) SmartApp, be sure to enable OAuth. In the IDE, while you have Ecobee (Connect) open, Click on "App Settings" (top right), then select the OAuth tab and enable OAuth. 
 
    <b>NOTE:</b> <i>This is a commonly missed step, but failing to enable OAuth will generate cryptic errors later when you try to use the SmartApp. So please don't skip this step.)</i>
 
