@@ -85,28 +85,32 @@ This work represents a significant overhaul of the aforemention prior implementa
     to <b>2</b> will present a minimalist but informative subset of messages to Live Logging for all of the related devices and Smart 
     Apps.
 
-* <b>Helper SmartApps</b>
- * Simplified the display list of current and optional Helper Apps to reduce scrolling and improve clarity
- * <b>Mode/Routines</b> handler: New "smart" changes to thermostat program:
-   * Send a notification to the location's notification log explaining what was done
-   * If current program is already the requested program, and we aren't in a hold, then leave it alone
-   * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply 
+* <b>Helper SmartApps</b> 
+  <p>Simplified the display list of current and optional Helper Apps to reduce scrolling and improve clarity</p>
+  
+  * <b>Mode/Routines</b> handler: New "smart" changes to thermostat program:
+    * Send a notification to the location's notification log explaining what was done
+    * If current program is already the requested program, and we aren't in a hold, then leave it alone
+    * If thermostat currently in "hold" mode, and the originally scheduled program is the same as the target, then simply 
      <code>resumeProgram(resumeAll=true)</code>
-   * New capability allows thermostat Program changes to invoke Mode Changes or to execute a Routine. E.g., when the thermostat changes to 
-     Vacation mode, run the "Goodbye!" Routine
- * New <b>Smart Circulation</b> Handler: mimics the latent (not yet enabled) ecobee3 function of the same name. Monitors the temperature 
-   across 2 or more sensors (not necessarily ecobee sensors - ANY ST thermometer will do), and if the temperature delta between the 
-   highest and lowest reading is greater than a configurable range, increases the minimum fan on time (automated circulation). Reduces the 
-   fanMinOnTime again when min/max temperatures are within 1F/0.5C of each other. Minimum and maximum fan circulation time (minutes per 
-   hour) and frequency of updating are also configurable.
- * New <b>Smart Room</b> Handler: for rooms that are frequently not used, automates adding/removing the Ecobee Sensor to specified 
-   Programs
-   and optionally opens/closes SmartThings-controlled vents (e.g. EcoNet and Keen vents). A "Smart Room" can be automatically enabled by 
-   opening the door for a specified time, and disabled after the door has been closed for a specified period. Optional Windows will pause 
-   the "active" state while open and re-enable it once they are closed. Door, Window, Vent and SmartRoom status are displayed in a row of
-   mini-icons within the device.
- * New <b>Smart Zone</b> Handler: attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC 
-   fan isn't run independently for each zone (thereby reducing electricity demand). 
+    * New capability allows thermostat Program changes to invoke Mode Changes or to execute a Routine. E.g., when the thermostat changes 
+      to 
+      Vacation mode, run the "Goodbye!" Routine
+      
+  * New <b>Smart Circulation</b> Handler: mimics the latent (not yet enabled) ecobee3 function of the same name. Monitors the temperature 
+    across 2 or more sensors (not necessarily ecobee sensors - ANY ST thermometer will do), and if the temperature delta between the 
+    highest and lowest reading is greater than a configurable range, increases the minimum fan on time (automated circulation). Reduces 
+    the fanMinOnTime again when min/max temperatures are within 1F/0.5C of each other. Minimum and maximum fan circulation time (minutes 
+    per hour) and frequency of updating are also configurable.
+    
+  * New <b>Smart Room</b> Handler: for rooms that are frequently not used, automates adding/removing the Ecobee Sensor to specified 
+    Programs and optionally opens/closes SmartThings-controlled vents (e.g. EcoNet and Keen vents). A "Smart Room" can be automatically 
+    enabled by opening the door for a specified time, and disabled after the door has been closed for a specified period. Optional Windows 
+    will pause the "active" state while open and re-enable it once they are closed. Door, Window, Vent and SmartRoom status are displayed 
+    in a row of mini-icons within the device.
+    
+  * New <b>Smart Zone</b> Handler: attempts to have ALL zones on a single HVAC synchronize their circulation schedule, so that the HVAC 
+    fan isn't run independently for each zone (thereby reducing electricity demand). 
 
 * <b>Other Miscellaneous Enhancements</b>
   * SmartApp Name: it is now possible to rename each instance of the Ecobee (Connect) SmartApp. This is useful for those with multiple 
