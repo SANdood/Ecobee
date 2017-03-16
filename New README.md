@@ -1,18 +1,30 @@
 Ecobee support for SmartThings - Enhanced
 =========================================
-This updated and enhanced version of the Ecobee thermostat support for SmartThings is based off of the Open Source enhancements developed and contributed by Sean Kendall Schneyer (@StrykerSKS), which was in turn based upon the original Open Source device driver provided by SmartThings.
+This updated and enhanced version of the Ecobee thermostat support for SmartThings is based off of the Open Source enhancements developed 
+and contributed by Sean Kendall Schneyer (@StrykerSKS), which was in turn based upon the original Open Source device driver provided by 
+SmartThings.
 
-I hereby contribute my edits and additions to the same Open Source domain as the prior works noted above. (Open Source descriptions here). I attest that my edits and modifications are solely my own original work, and not derived, copied or replicated from other non-open source works. Any similarity to other works is therefore a product of development using the Ecobee API and the SmartThings development environment, which independently and together define a narrow band of operational leeway in order to successfully interface with the two environments.
+I hereby contribute my edits and additions to the same Open Source domain as the prior works noted above. (Open Source descriptions here). 
+I attest that my edits and modifications are solely my own original work, and not derived, copied or replicated from other non-open source 
+works. Any similarity to other works is therefore a product of development using the Ecobee API and the SmartThings development 
+environment, which independently and together define a narrow band of operational leeway in order to successfully interface with the two 
+environments.\
+
+This work is entirely FREE - users are under no obligation to compensate me for my contributions to this Open Source project. However, if 
+you would like to make a small donation, you can do so here:
+
+https://paypal.me/BarryABurke
 
 <b>IMPORTANT!</b> Before installing and using my enhanced version, I <i>strongly encourage</i> you to review the most excellent 
-documentation written by @StrykerSKS for his updates. You can find it here: 
+documentation written by @StrykerSKS for his updates. You can find it here:
+
 https://github.com/StrykerSKS/SmartThingsPublic/blob/StrykerSKS-Ecobee3/smartapps/smartthings/ecobee-connect.src/README.md
 
 <b>ALSO IMPORTANT! Please review the INSTALL document before attempting to install this enhanced ecobee support</b>
 
 Notable Enhancements and Changes
 --------------------------------
-This work represents a significant overhaul of the aforemention prior implementation. Most notable of these include:
+This work represents a significant overhaul of the aforemention prior implementations. Most notable of these include:
 * <b>Efficiency and Performance</b>
   * A <i>significant</i> reduction in the frequency and amount of data collected from the Ecobee cloud servers 
   * A <i>significant</i> reduction in the amount of data sent from the Ecobee (connect) SmartApp to the individual ecobee thermostat 
