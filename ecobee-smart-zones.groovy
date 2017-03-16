@@ -13,17 +13,12 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *  Written by Barry A. Burke (storageanarchy@gmail.com)
- *  Written: 2017-01-28
- *	https://github.com/SANdood/Ecobee/
- *	0.1.1 -	Beta Release
+ *	1.0.0 - Final prep for General Release
+ *	1.0.1 - Edits to LOG and setup for consistency
+ *
  */
-def getVersionNum() { return "0.1.1" }
+def getVersionNum() { return "1.0.1" }
 private def getVersionLabel() { return "ecobee smartZones Version ${getVersionNum()}" }
-
-/*
-
- */
 
 definition(
 	name: "ecobee Smart Zones",
@@ -44,19 +39,19 @@ preferences {
 // Preferences Pages
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Setup Routines", uninstall: true, install: true) {
-    	section(title: "Name for Routine Handler") {
-        	label title: "Name this Routine Handler", required: true
+    	section(title: "Name for Smart Zone Handler") {
+        	label title: "Name thisHandler", required: true, defaultValue: "Smart Zone"
         
         }
         
         section(title: "Select Master Thermostat") {
         	if(settings.tempDisable == true) paragraph "WARNING: Temporarily Disabled as requested. Turn back on to activate handler."
-        	input ("masterThermostat", "capability.thermostat", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)            
+        	input ("masterThermostat", "capability.Thermostat", title: "Pick Master Ecobee Thermostat", required: true, multiple: false, submitOnChange: true)            
 		}
         
         section(title: "Select Slave Thermostats") {
         	// Settings option for using Mode or Routine
-            input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.thermostat", required: true, multiple: true, submitOnChange: true)
+            input(name: "slaveThermostats", title: "Pick Slave Ecobee Thermostat(s)", type: "capability.Thermostat", required: true, multiple: true, submitOnChange: true)
 		}
 		
 		// section(title: "Fan Only" ){}
@@ -148,5 +143,6 @@ def masterFanStateHandler(evt=null) {
 // Helper Functions
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
-	parent.LOG(message, level, child, logType, event, displayEvent)
+	parent.LOG(message, level, null, logType, event, displayEvent)
+    log."${logType}" message
 }
