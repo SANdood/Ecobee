@@ -1578,7 +1578,7 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                        	Boolean needExtRT = false
 			       		tempSettings.each { 
             				if (!needExtRT && checkTherms.contains(it.key)){
-                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}",2,null,'info')
+                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}",4,null,'info')
             					switch (it.value.hvacMode) {
             						case 'heat':
                                     case 'auxHeatOnly':
