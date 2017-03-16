@@ -4,19 +4,27 @@ Installation Instructions
 
 <b>NOTE: </b> You should follow Sean's instructions for <b>Install Manually from Code</b>, installing <i>and publishing</i> all five SmartApps and the two Device Handlers described below.
 
+BEFORE YOU START
+----------------
 If you have been using an earlier version of the ecboee Device Handler, either the original from SmartThings or the 
-updated version from @StrykerSKS, <b>your best bet is to remove those devices and SmartApps from your environment</b>
-before installing this version.
+updated version from @StrykerSKS, <b>your best bet is to remove those devices and SmartApps from your environment altogether
+before installing this version</b>.
 
-However, this version has been designed in hopes to be able to simply save/publish over your existing version without 
-breaking anything, so if you're feeling gutsy, go right ahead. Let me know how it works (you very likely will have to 
-re-authorize with Ecobee once after you get everything installed and published).
+This version has been designed in hopes to be able to simply save/publish over your existing version without 
+breaking anything, so if you're feeling gutsy, go right ahead. Let me know how it works - some have succeeded, others have not.
+
+<b><i>If you install this version over a prior version of my enhancements, you MUST open the Ecobee (Connect) app before trying to open 
+the Ecobee Thermostat device. Otherwise, it WILL crash the Mobile Apps. Sadly, this is unavoidable...</i></b>
+
+Follow These Steps
+------------------
 
 1. Copy the following into your IDE section "My SmartApps", overwriting existing versions or 'New SmartApp / From Code'
   * <code>ecobee-connect.groovy</code>
   * <code>ecobee-open-contacts.groovy</code>
   * <code>ecobee-routines.groovy</code>
   * <code>ecobee-smart-circulation.groovy</code>
+  * <code>ecobee-smart-room.groovy</code>
   * <code>ecobee-smart-zones.groovy</code>
   
 2. Save and 'Publish / For Me' each of the above. 
@@ -43,6 +51,8 @@ re-authorize with Ecobee once after you get everything installed and published).
   
 7. When you finish the configuration, hit "Done".
 
-8. Now, go select your thermostat(s) and check out the updated UI.
+8. Wait 60 seconds (seriously - don't open ANYTHING for 1 minute)
 
-9. For a thorough review of the updates and new features, be sure to read the README file in this repository.
+9. Now, go select your thermostat(s) and check out the updated UI.
+
+10. For a thorough review of the updates and new features, be sure to read the README file in this repository.
