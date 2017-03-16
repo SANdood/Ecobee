@@ -22,7 +22,7 @@
  *
  */
 
-def getVersionNum() { return "1.0.1" }
+def getVersionNum() { return "1.0.1a" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
