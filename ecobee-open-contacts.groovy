@@ -13,12 +13,15 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *	1.0.0	-	Preparation for General Release
+ *	1.0.1	-	Tweaked LOG and setup for consistency across all the Helper SmartApps
+ *
  */
  
  /**
   * TODO: Add support for more than on/off such as programs
   */
-def getVersionNum() { return "0.1.1" }
+def getVersionNum() { return "1.0.1" }
 private def getVersionLabel() { return "ecobee Routines Version ${getVersionNum()}" }
 
 
@@ -43,7 +46,7 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Setup Routines", uninstall: true, install: true) {
     	section(title: "Name for Open Contacts Handler") {
-        	label title: "Name this Open Contacts Handler", required: true
+        	label title: "Name this Open Contacts Handler", required: true, defaultValue: "Open Contacts Handler"
         
         }
         
@@ -310,5 +313,6 @@ private def sendNotification(message) {
 
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
-	parent.LOG(message, level, child, logType, event, displayEvent)
+	parent.LOG(message, level, null, logType, event, displayEvent)
+    log."${logType}" message
 }
