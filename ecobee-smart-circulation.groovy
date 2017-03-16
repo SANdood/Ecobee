@@ -13,12 +13,14 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *	0.1.1	01/25/2017	Barry Burke -	Initial Release
- *	0.1.2	01/28/2017	Barry Burke	-	Beta Release
- *	0.1.3	01/29/2017	Barry Burke -	Added configurable support for overriding fanMinOnTime during Vacation holds
- *	0.1.4	02/04/2017 	Barry Burke	-	Added ability to specify both modes and programsList for when a handler should/can run
- *	0.1.5	02/06/2017	Barry Burke -	Android fix (bad range in min/maxFanOnTime settings)
- *	0.1.6	02/07/2016	Barry Burke	- 	Minor logic tweaking - is now Mode *OR* Program
+ *	0.1.1 -	Initial Release
+ *	0.1.2 -	Beta Release
+ *	0.1.3 -	Added configurable support for overriding fanMinOnTime during Vacation holds
+ *	0.1.4 -	Added ability to specify both modes and programsList for when a handler should/can run
+ *	0.1.5 -	Android fix (bad range in min/maxFanOnTime settings)
+ *	0.1.6 - Minor logic tweaking - is now Mode *OR* Program
+ *	1.0.0 - Final prep for General Release
+ *	1.0.1 - Tweaked LOG and setup for consistency
  *
  */
 def getVersionNum() { return "0.1.6" }
@@ -45,7 +47,7 @@ preferences {
 def mainPage() {
 	dynamicPage(name: "mainPage", title: "Configure Smart Circulation", uninstall: true, install: true) {
     	section(title: "Name for Smart Circulation Handler") {
-        	label title: "Name this Smart Circulation Handler", required: true      
+        	label title: "Name this Smart Circulation Handler", required: true, defaultValue: "Smart Circulation"  
         }
         
         section(title: "Select Thermostat") {
@@ -310,6 +312,6 @@ def deltaHandler(evt=null) {
 // Helper Functions
 private def LOG(message, level=3, child=null, logType="debug", event=true, displayEvent=true) {
 	message = "${app.label} ${message}"
-	parent.LOG(message, level, child, logType, event, displayEvent)
-    if (level <= 4) log.info message
+	parent.LOG(message, level, null, logType, event, displayEvent)
+    log."${logType}" message
 }
