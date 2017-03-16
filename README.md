@@ -68,7 +68,7 @@ This work represents a significant overhaul of the aforemention prior implementa
       on a rresume program request.
     * NOTE: It is still possible programmatically to request that only the most recent hold request is resumed bu calling 
       <code>thermostat.resumeProgram(false)</code>. The new Smart Zone helper app utilizes this to return from its temporary fanOn 
-      events. 
+      events.
    * Polling Frequency: As a result of the aforementioned operational efficiency enhancements, it is now possible to run ecobee 
      thermostat devices with very short polling frequency - as low as once per minute. Although Ecobee documents that none of the 
      API's data objects are updated more frequently than every 3 minutes, this has been observed to not be true. Many operations
