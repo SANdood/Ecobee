@@ -19,10 +19,11 @@
  *	0.10.4 - Can now add/delete sensor from a Program; device shows current Program (same as parent thermostat)
  *	1.0.0  - Preparation for General Release
  *	1.0.1  - Added Offline handling (power out, network down, etc.)
+ *	1.0.2  - Changed handling of online/offline
  *
  */
 
-def getVersionNum() { return "1.0.1a" }
+def getVersionNum() { return "1.0.2" }
 private def getVersionLabel() { return "Ecobee Sensor Version ${getVersionNum()}" }
 private def programIdList() { return ["home","away","sleep"] } // we only support these program IDs for addSensorToProgram()
 
@@ -44,6 +45,7 @@ metadata {
         attribute "windows", "string"
         attribute "vents", "string"
         attribute "SmartRoom", "string"
+        attribute "currentProgramName", "string"
         
         command "noOp"					// these are really for internal use only
         command "enableSmartRoom"
@@ -195,6 +197,7 @@ def generateEvent(Map results) {
 	def tempScale = getTemperatureScale()
     def precision = device.currentValue("decimalPrecision")
     if (!precision) precision = (tempScale == "C") ? 1 : 0
+    def isConnected = (device.currentValue('currentProgramName') != 'Offline')
 
 	if(results) {
 		String tempDisplay = ""
@@ -205,16 +208,14 @@ def generateEvent(Map results) {
 			def event = [:]  // [name: name, linkText: linkText, handlerName: name]
            
 			String sendValue = value as String
-			if (name=='temperature') {
-                if (sendValue == 'unknown') {
+			if (name=='temperature')  {
+                if ((sendValue == 'unknown') || !isConnected) {
                 	// We are OFFLINE
                     LOG( "Warning: Remote Sensor (${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
-                    atomicState.onlineState = false
                     sendEvent( name: "temperatureDisplay", linkText: linkText, value: "Offline", handlerName: "temperatureDisplay", descriptionText: "Display temperature is ${tempDisplay}", isStateChange: true, displayed: false)
 					event = [name: name, linkText: linkText, descriptionText: "Sensor is Offline", handlerName: name, value: sendValue, isStateChange: true, displayed: true]
                 } else {
-                	// must be online
-                    atomicState.onlineState = true   
+                	// must be online  
 					isChange = isStateChange(device, name, sendValue)
                     
                     // Generate the display value that will preserve decimal positions ending in 0
@@ -229,7 +230,7 @@ def generateEvent(Map results) {
                     }
                 }
 			} else if (name=='motion') {        
-            	if ( (sendValue == 'unknown') || (!atomicState.onlineState) ) {
+            	if ( (sendValue == 'unknown') || !isConnected) {
                 	// We are OFFLINE
                     LOG( "Warning: Remote Sensor (${name}) is OFFLINE. Please check the batteries or move closer to the thermostat.", 2, null, 'warn')
                     sendValue = "unknown"
@@ -239,7 +240,10 @@ def generateEvent(Map results) {
 				if (isChange) event = [name: name, linkText: linkText, descriptionText: "Motion is ${sendValue}", handlerName: name, value: sendValue.toString(), isStateChange: true, displayed: true]
 			} else if (name=='currentProgramName') {
             	isChange = isStateChange(device, name, sendValue)
-				if (isChange) event = [name: name, linkText: linkText, value: sendValue, descriptionText: 'Program is '+sendValue.replaceAll(':',''), isStateChange: true, displayed: true]
+                if (isChange) {
+                	isConnected = (sendValue != 'Offline')		// update if it changes
+					event = [name: name, linkText: linkText, value: sendValue, descriptionText: 'Program is '+sendValue.replaceAll(':',''), isStateChange: true, displayed: true]
+                }
             } else { // must be one of Home, Away, Sleep, vents, doors, windows, SmartRoom, decimalPrecision or thermostatId
 				isChange = isStateChange(device, name, sendValue)
 				if (isChange) event = [name: name, linkText: linkText, handlerName: name, value: sendValue, isStateChange: true, displayed: true]
