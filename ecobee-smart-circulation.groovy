@@ -21,9 +21,10 @@
  *	0.1.6 - Minor logic tweaking - is now Mode *OR* Program
  *	1.0.0 - Final prep for General Release
  *	1.0.1 - Tweaked LOG and setup for consistency
+ *	1.0.2 - Better null variable handling
  *
  */
-def getVersionNum() { return "0.1.6" }
+def getVersionNum() { return "1.0.2" }
 private def getVersionLabel() { return "ecobee Smart Circulation Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
 
@@ -129,23 +130,23 @@ def initialize() {
     atomicState.lastAdjustmentTime = now() - (60001 * fanAdjustMinutes.toLong()).toLong() // make sure we run on next deltaHandler event    
 
     subscribe(theThermostat, "thermostatOperatingState", modeOrProgramHandler)
-    subscribe(theThermostat, "currentProgram", modeOrProgramHandler)
+    subscribe(theThermostat, "currentProgramName", modeOrProgramHandler)
     subscribe(theThermostat, "thermostatHold", modeOrProgramHandler)
     subscribe(location, "routineExecuted", modeOrProgramHandler)    
     subscribe(location, "mode", modeOrProgramHandler)
     
     subscribe(theSensors, "temperature", deltaHandler)
 
-    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger()
+    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime') ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	
     boolean vacationHold = (theThermostat.currentValue("currentProgramName") == "Vacation")
     
-	log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgram')}"
+	log.debug "settings ${theModes}, location ${location.mode}, programs ${thePrograms} & ${programsList}, thermostat ${theThermostat.currentValue('currentProgramName')}, currentOnTime ${currentOnTime}"
    
 	// Allow adjustments if thermostat OR location is currently as configured
     // Also allow if neither are configured
-    def isOK = true
+    boolean isOK = true
     if (theModes || thePrograms) {
-    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : false)
+    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgramName'))) ? true : false)
     }
     atomicState.isOK = isOK
     
@@ -179,7 +180,7 @@ def modeOrProgramHandler(evt=null) {
 	// Allow adjustments if location.mode OR thermostat.currentProgram match configuration settings
     def isOK = true
     if (theModes || thePrograms) {
-    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgram'))) ? true : false)
+    	isOK = (theModes && theModes.contains(location.mode)) ? true : ((thePrograms && thePrograms.contains(theThermostat.currentValue('currentProgramName'))) ? true : false)
     }
 	atomicState.isOK = isOK
     
@@ -262,7 +263,7 @@ def deltaHandler(evt=null) {
 		}
 	}
     
-    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime').toInteger()	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
+    Integer currentOnTime = theThermostat.currentValue('fanMinOnTime') ? theThermostat.currentValue('fanMinOnTime').toInteger() : 0	// Ecobee (Connect) will populate this with Vacation.fanMinOnTime if necessary
 	Integer newOnTime = currentOnTime
 	
 	if (delta >= deltaTemp.toDouble()) {			// need to increase recirculation (fanMinOnTime)
