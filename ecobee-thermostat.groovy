@@ -46,10 +46,11 @@
  *	0.10.17- Work In Process
  *	1.0.0  - Preparation for General Release
  *  1.0.1  - Added support for Thermostat Offline from Ecobee Cloud
+ *	1.0.2  - Fixed intermittent update of humidity
  *
  */
 
-def getVersionNum() { return "1.0.1" }
+def getVersionNum() { return "1.0.2" }
 private def getVersionLabel() { return "Ecobee Thermostat Version ${getVersionNum()}" }
 import groovy.json.JsonSlurper
  
@@ -629,7 +630,8 @@ def generateEvent(Map results) {
             String tempDisplay = ""
 			def eventFront = [name: name, linkText: linkText, handlerName: name]
 			def event = [:]
-			def isChange = isStateChange(device, name, value.toString())
+            String sendValue = value.toString()
+			def isChange = isStateChange(device, name, sendValue)
 			
 			switch (name) {
 				case 'temperature':
@@ -638,7 +640,7 @@ def generateEvent(Map results) {
 				case 'weatherTemperature':
                 case 'thermostatSetpoint':
                     if (isChange) {
-                    	String sendValue = "${value}"		// Already rounded to appropriate user precision (except temperature, which is sent in API precision)
+                    	//String sendValue = "${value}"		// Already rounded to appropriate user precision (except temperature, which is sent in API precision)
                     	event = eventFront + [value: sendValue,  descriptionText: getTemperatureDescriptionText(name, value, linkText), isStateChange: true, displayed: true]
 						if (name=="temperature") {
 							// Generate the display value that will preserve decimal positions ending in 0
@@ -655,9 +657,8 @@ def generateEvent(Map results) {
                 	// A little tricky, but this is how we display Smart Recovery within the stock Thermostat multiAttributeTile
                     // thermostatOperatingStateDisplay has the same values as thermostatOperatingState, plus "heating (smart recovery)" 
                     // and "cooling (smart recovery)". We separately update the standard thermostatOperatingState attribute.
-                	String sendValue = "${value}"
                     isChange = isStateChange(device, "${name}Display", sendValue) 
-                    Boolean displayDesc
+                    boolean displayDesc
                     String descText
                     String realValue
                     if (sendValue.contains('(')) {
@@ -696,36 +697,39 @@ def generateEvent(Map results) {
 					break;
 				
 				case 'humidity':
-                	Integer humSetpoint = device.currentValue('humiditySetpoint').toInteger()
-                    String setpointText = (humSetpoint == 0 ) ? '' : " (setpoint: ${humSetpoint}%)"
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Humidity is ${value}%${setpointText}", isStateChange: true, displayed: true]
+                	def humSetpoint = device.currentValue('humiditySetpoint') 
+                    if (humSetpoint == null) humSetpoint = 0
+                    String setpointText = (humSetpoint == 0) ? '' : " (setpoint: ${humSetpoint}%)"
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Humidity is ${sendValue}%${setpointText}", isStateChange: true, displayed: true]
             		break;
 				
 				case 'humiditySetpoint':
 					if (isChange && (value.toInteger() != 0)) {
-                    	event = eventFront + [value: "${value}", descriptionText: "Humidity setpoint is ${value}%", isStateChange: true, displayed: false]
-		            	sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${device.currentValue('humidity')}% (setpoint: ${value}%)", isStateChange: false, displayed: true )
+                    	event = eventFront + [value: sendValue, descriptionText: "Humidity setpoint is ${sendValue}%", isStateChange: true, displayed: false]
+                        def hum = device.currentValue('humidity')
+                        if (hum == null) hum = 0
+		            	sendEvent( name: 'humidity', linkText: linkText, handlerName: 'humidity', descriptionText: "Humidity is ${hum}% (setpoint: ${sendValue}%)", isStateChange: false, displayed: true )
                         objectsUpdated++
                     }
                     break;
 				
 				case 'currentProgramName':
                 	String progText = ''
-                    if (value == 'Vacation') {
+                    if (sendValue == 'Vacation') {
                     	progText = 'Program is Vacation'
                         sendEvent(name: 'resumeProgram', value: 'cancel', displayed: false)	// change the button to Cancel Vacation
-                    } else if (value == 'offline') {
-                    	progText = 'Program is Offline'
+                    } else if (sendValue == 'Offline') {
+                    	progText = 'Thermostat is Offline'
                     } else {
-                    	progText = 'Program is '+(value as String).replaceAll(':','')
+                    	progText = 'Program is '+sendValue.trim().replaceAll(':','')
                         // TODO: Should really disable the button if we aren't in Hold: * or Auto: * programs
                         sendEvent(name: 'resumeProgram', value: 'resume', displayed: false)	// change the button to Resume Program
                     }
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: progText, isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: progText, isStateChange: true, displayed: true]
 					break;
 				
 				case 'apiConnected':
-                	if (isChange) event = eventFront + [value: "${value}", descriptionText: "API Connection is ${value}", isStateChange: true, displayed: true]
+                	if (isChange) event = eventFront + [value: sendValue, descriptionText: "API Connection is ${value}", isStateChange: true, displayed: true]
 					break;
 				
 				case 'weatherSymbol':
@@ -751,33 +755,33 @@ def generateEvent(Map results) {
 				
 				case 'thermostatHold':
 					if (isChange) {
-                    	String descText = (value == "") ? 'Hold finished' : (value == 'hold') ? "Hold ${device.currentValue('currentProgram')} (${device.currentValue('scheduledProgram')})" : "Hold for ${value}"
-                    	event = eventFront + [value: "${value}", descriptionText: descText, isStateChange: true, displayed: true]
+                    	String descText = (sendValue == '') ? 'Hold finished' : (value == 'hold') ? "Hold ${device.currentValue('currentProgram')} (${device.currentValue('scheduledProgram')})" : "Hold for ${sendValue}"
+                    	event = eventFront + [value: sendValue, descriptionText: descText, isStateChange: true, displayed: true]
                     }
 					break;
 				
 				case 'holdStatus': 
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "${value}", isStateChange: true, displayed: (value != '')]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: sendValue, isStateChange: true, displayed: (value != '')]
 					break;
                     
               	case 'motion': 
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Motion is ${value}", isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Motion is ${sendValue}", isStateChange: true, displayed: true]
 					break;
 				
 				case 'fanMinOnTime':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Fan On ${value} minutes per hour", isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Fan On ${sendValue} minutes per hour", isStateChange: true, displayed: true]
 					break;
 				
 				case 'thermostatMode':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Mode is ${value}", isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Mode is ${sendValue}", isStateChange: true, displayed: true]
 		            break;
 				
         		case 'thermostatFanMode':
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "Fan Mode is ${value}", isStateChange: true, displayed: true]
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "Fan Mode is ${sendValue}", isStateChange: true, displayed: true]
             		break;
 				
 				case 'debugEventFromParent':
-					event = eventFront + [value: "${value}", descriptionText: "-> ${value}", isStateChange: true, displayed: true]
+					event = eventFront + [value: sendValue, descriptionText: "-> ${sendValue}", isStateChange: true, displayed: true]
 					break;
 				
 				// These are ones we don't need to display or provide descriptionText for (mostly internal or debug use)
@@ -811,12 +815,12 @@ def generateEvent(Map results) {
                 case 'programsList':
                 case 'holdEndsAt':
                 case 'temperatureScale':
-					if (isChange) event = eventFront +  [value: "${value}", isStateChange: true, displayed: false]
+					if (isChange) event = eventFront +  [value: sendValue, isStateChange: true, displayed: false]
 					break;
 				
 				// everything else just gets displayed with generic text
 				default:
-					if (isChange) event = eventFront + [value: "${value}", descriptionText: "${name} is ${value}", isStateChange: true, displayed: true]			
+					if (isChange) event = eventFront + [value: sendValue, descriptionText: "${name} is ${sendValue}", isStateChange: true, displayed: true]			
 					break;
 			}
 			if (event != [:]) {
@@ -827,6 +831,7 @@ def generateEvent(Map results) {
         		event = [ name: 'temperatureDisplay', value: tempDisplay, linkText: linkText, descriptionText:"Temperature Display is ${tempDisplay}", displayed: false ]
         		sendEvent(event)
             	LOG("generateEvent() - Temperature updated, calling sendevent(${event})", 5)
+                objectsUpdated++
         	}
 		}
 		generateSetpointEvent()
