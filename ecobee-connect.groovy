@@ -69,13 +69,14 @@
  *			 Added capability to add/remove a sensor from a climate/program
  *	1.0.0 -	 Final preparation for general release
  *	1.0.1 -	 Added "Offline" status when ecobee Cloud loses connection with thermostat (power out, network down, etc.)
- *	1.0.2a -	 Chasing another uninitialized variable issue
+ *	1.0.2 -	 Chasing another uninitialized variable issue
+ *	1.0.3 -  Updates to thermostat->Ecobee Cloud connection handling
  *
  *
  */  
 import groovy.json.JsonOutput
 
-def getVersionNum() { return "1.0.2a" }
+def getVersionNum() { return "1.0.3" }
 private def getVersionLabel() { return "Ecobee (Connect) Version ${getVersionNum()}" }
 private def getHelperSmartApps() {
 	return [ 
@@ -1575,10 +1576,9 @@ private def pollEcobeeAPI(thermostatIdsString = '') {
                         // While we are here, let's find out if we really need the extendedRuntime data...
 						// We do it here because: a) it only changes when settings changes, and b) we already have the settings Map in hand
                         // (thus it saves the cost of copying atomicState.settings later)
-                       	Boolean needExtRT = false
+                       	boolean needExtRT = false
 			       		tempSettings.each { 
             				if (!needExtRT && checkTherms.contains(it.key)){
-                            	LOG("pollEcobeeAPI() - checking for needExtRT ${it.key}: ${it.value}",4,null,'info')
             					switch (it.value.hvacMode) {
             						case 'heat':
                                     case 'auxHeatOnly':
@@ -1743,6 +1743,7 @@ def updateSensorData() {
             if (sensorDNI && settings.ecobeesensors?.contains(sensorDNI)) {		// only process the selected/configured sensors
 				def temperature = ''
 				def occupancy = ''
+                Integer humidity = null
                             
 				it.capability.each { cap ->
 					if (cap.type == "temperature") {
@@ -1771,13 +1772,16 @@ def updateSensorData() {
                        	} else {
 							occupancy = 'inactive'
 						}                            
-					}
+					} else if (cap.type == 'humidity') {		// only thermostats have humidity
+                    	if (cap.value?.isNumber()) humidity = cap.value.toInteger()
+                    }
 				}
                                             				
 				def sensorData = [:]
                 def lastList = atomicState."${sensorDNI}" as List
-                if ( !lastList || (lastList.size() < 4)) {
-                    lastList = [999,'x',-1,'default']	// initilize the list 
+                def listSize = 5
+                if ( !lastList || (lastList.size() < listSize)) {
+                    lastList = [999,'x',-1,'default','null']	// initilize the list 
                     sensorData = [ thermostatId: tid ]		// this will never change, but we need to send it at least once
                 }
                     
@@ -1800,8 +1804,12 @@ def updateSensorData() {
                 def currentPrograms = atomicState.currentProgramName
                 def currentProgramName = (currentPrograms && currentPrograms.containsKey(tid)) ? currentPrograms[tid] : 'default' // not set yet, we will have to get it later. 
                 if (forcePoll || (lastList[3] != currentProgramName)) { sensorData << [ currentProgramName: currentProgramName ] }
-                sensorList += currentProgramName
-               
+                sensorList += [currentProgramName]
+                
+                // not every sensor has humidity
+               	if (forcePoll || ((humidity != null) && (lastList[4] != humidity))) { sensorData << [ humidity: humidity ] }
+                sensorList += [humidity]
+                
                	// collect the climates that this sensor is included in
                 def sensorClimates = [:]
                 def climatesList = []
@@ -1821,10 +1829,11 @@ def updateSensorData() {
                 	}
                 	LOG("updateSensorData() - sensor ${it.name} is used in ${sensorClimates}", 4, null, 'trace')
                 } 
+                
                 // check to see if the climates have changed. Notice that there can be 0 climates if the thermostat data wasn't updated this time;
                 // note also that we will send the climate data every time the thermostat IS updated, even if they didn't change, becuase we don't 
                 // store them in the atomicState unless the thermostat object changes...
-                if (forcePoll || (lastList.size() < (4+climatesList.size())) || (lastList.drop(4) != climatesList)) {	
+                if (forcePoll || (lastList.size() < (listSize+climatesList.size())) || (lastList.drop(listSize) != climatesList)) {	
                     sensorData << sensorClimates
                     sensorList += climatesList
                 }
@@ -2012,8 +2021,8 @@ def updateThermostatData() {
 		def thermostatHold = ''
         String holdEndsAt = ''
         
-        def isConnected = runtime.connected
-        // log.debug "Connected = ${isConnected}"
+        def isConnected = runtime?.connected
+        if (!isConnected) LOG("isConnected: ${isConnected}",2,null,'warn')
         if (!isConnected) {
         	// Ecobee Cloud lost connection with the thermostat - power or network outage
             currentClimateName = 'Offline'
@@ -2299,7 +2308,7 @@ def updateThermostatData() {
         	}
             
             // Thermostat operational things that rarely change, (a few times a day at most)
-         	def rarelyList = [fanMinOnTime,thermostatHold,holdEndsAt,statusMsg,currentClimateName,currentClimateId,scheduledClimateName,
+         	def rarelyList = [fanMinOnTime,isConnected,thermostatHold,holdEndsAt,statusMsg,currentClimateName,currentClimateId,scheduledClimateName,
             					scheduledClimateId,currentFanMode]
 		    if (forcePoll || (changeRarely == [:]) || !changeRarely.containsKey(tid) || (changeRarely[tid] != rarelyList)) { 
             	data += [
