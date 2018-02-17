@@ -124,13 +124,11 @@ def initialize() {
     Double tempNow
 	switch( settings.tempSource) {
 		case 'Weather for Location':
-			if (settings.locFreq == 1) {
-            	runEvery1Minute( getZipTemp() )
-            } else if (locFreq < 60) {
-            	runEvery"${settings.locFreq}"Minutes( getZipTemp() )
+			if (locFreq < 60) {
+            	"runEvery${locFreq}Minute${locFreq!=1?'s':''}"( 'getZipTemp' )
             } else {
             	locHours = settings.locFreq / 60
-                runEvery"${locHours}"Hours( getZipTemp() )
+                "runEvery${locHours}Hours"( 'getZipTemp' )
             }
             tempNow = getZipTemp()
 			break;
@@ -149,13 +147,11 @@ def initialize() {
 			break;
 		
 		case 'WeatherUnderground Station':
-			if (settings.pwsFreq == 1) {
-            	runEvery1Minute( getPwsTemp() )
-            } else if (settings.pwsFreq < 60) {
-            	runEvery"${settings.pwsFreq}"Minutes( getPwsTemp() )
+			if (settings.pwsFreq < 60) {
+            	"runEvery${pwsFreq}Minute${pwsFreq!=1?'s':''}"( 'getPwsTemp' )
             } else {
             	pwsHours = settings.pwsFreq / 60
-                runEvery"${pwsHours}"Hours( getPwsTemp() )
+                "runEvery${pwsHours}Hours"( 'getPwsTemp' )
             }
             tempNow = getPwsTemp()
 			break;
